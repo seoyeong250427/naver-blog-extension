@@ -3,8 +3,6 @@
 // ── 아이콘 클릭 시 바로 큰 창 열기 ──────────────────────────────────
 chrome.action.onClicked.addListener(async () => {
   const url = chrome.runtime.getURL('window/main.html');
-
-  // 이미 열려있으면 포커스만
   const allWindows = await chrome.windows.getAll({ populate: true });
   for (const win of allWindows) {
     for (const tab of (win.tabs || [])) {
@@ -14,18 +12,10 @@ chrome.action.onClicked.addListener(async () => {
       }
     }
   }
-
-  // 새 창으로 열기
-  chrome.windows.create({
-    url,
-    type: 'popup',
-    width: 1400,
-    height: 820,
-    focused: true
-  });
+  chrome.windows.create({ url, type: 'popup', width: 1400, height: 820, focused: true });
 });
 
-// ── 메시지 핸들러 ──────────────────────────────────────────────────────
+// ── 메시지 핸들러 ────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'COLLECT_TRENDS')  { collectNaverTrends(msg.options).then(sendResponse); return true; }
   if (msg.type === 'ANALYZE_KEYWORD') { analyzeKeyword(msg).then(sendResponse); return true; }
@@ -62,9 +52,9 @@ function waitTabLoad(tabId, timeout) {
 // ── 키워드 분석 ──────────────────────────────────────────────────────
 async function analyzeKeyword({ keyword, naverCustomerId, naverAccessLicense, naverSecretKey }) {
   try {
-    const adData = await getAdData(keyword, naverCustomerId, naverAccessLicense, naverSecretKey);
+    const adData   = await getAdData(keyword, naverCustomerId, naverAccessLicense, naverSecretKey);
     const docCount = await getBlogDocCount(keyword);
-    const total = (adData.pc || 0) + (adData.mobile || 0);
+    const total    = (adData.pc || 0) + (adData.mobile || 0);
     const goldIndex = (total > 0 && docCount > 0)
       ? parseFloat(((total / docCount) * 100).toFixed(1))
       : null;
@@ -79,11 +69,23 @@ async function getAdData(keyword, customerId, license, secret) {
   const timestamp = Date.now().toString();
   const sig = await makeSignature(timestamp, method, path, secret);
   const params = new URLSearchParams({ hintKeywords: keyword, showDetail: '1' });
+
   const res = await fetch(`https://manage.searchad.naver.com${path}?${params}`, {
     method,
-    headers: { 'Content-Type':'application/json', 'X-Timestamp':timestamp, 'X-API-KEY':license, 'X-Customer':customerId||'', 'X-Signature':sig }
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Timestamp':  timestamp,
+      'X-API-KEY':    license,
+      'X-Customer':   String(customerId),
+      'X-Signature':  sig
+    }
   });
-  if (!res.ok) throw new Error(`광고 API ${res.status}`);
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`광고 API ${res.status}: ${body.slice(0,100)}`);
+  }
+
   const data = await res.json();
   const item = data.keywordList?.find(k => k.relKeyword === keyword) || data.keywordList?.[0];
   if (!item) return { pc:0, mobile:0 };
@@ -92,9 +94,10 @@ async function getAdData(keyword, customerId, license, secret) {
 
 async function getBlogDocCount(keyword) {
   try {
-    const res = await fetch(`https://search.naver.com/search.naver?where=blog&query=${encodeURIComponent(keyword)}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120' }
-    });
+    const res = await fetch(
+      `https://search.naver.com/search.naver?where=blog&query=${encodeURIComponent(keyword)}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120' } }
+    );
     const html = await res.text();
     const m1 = html.match(/총\s*([\d,]+)\s*개/);
     if (m1) return parseInt(m1[1].replace(/,/g,''));
@@ -113,7 +116,7 @@ async function makeSignature(timestamp, method, path, secret) {
 
 async function testNaverApi({ naverCustomerId, naverAccessLicense, naverSecretKey }) {
   try {
-    await getAdData('테스트', naverCustomerId, naverAccessLicense, naverSecretKey);
+    await getAdData('블로그', naverCustomerId, naverAccessLicense, naverSecretKey);
     return { success: true };
   } catch(e) {
     return { success: false, error: e.message };
