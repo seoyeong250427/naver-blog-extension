@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<!-- 황금키워드 도구 메인 윈도우 - 화이트 테마 -->
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>황금키워드 도구</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: -apple-system, 'Noto Sans KR', 'Malgun Gothic', sans-serif; font-size: 13px; background: #f5f6fa; color: #1a1a2e; overflow: hidden; }
+
+    /* ── 헤더 ── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 24px; background: #fff;
+      border-bottom: 1px solid #e8eaf0; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .header-title { font-size: 18px; font-weight: 800; color: #f59e0b; letter-spacing: -0.5px; }
+    .header-title span { color: #1a1a2e; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .auto-status { font-size: 11px; color: #888; display: flex; align-items: center; gap: 5px; }
+    .auto-dot { width: 7px; height: 7px; border-radius: 50%; background: #d1d5db; }
+    .auto-dot.active { background: #22c55e; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ── 탭 ── */
+    .tab-nav { display: flex; background: #fff; border-bottom: 1px solid #e8eaf0; padding: 0 24px; }
+    .tab-btn {
+      padding: 11px 20px; background: none; border: none;
+      border-bottom: 3px solid transparent; color: #999;
+      cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s;
+    }
+    .tab-btn.active { color: #f59e0b; border-bottom-color: #f59e0b; font-weight: 700; }
+    .tab-btn:hover:not(.active) { color: #555; }
+
+    /* ── 레이아웃 ── */
+    .content-area { height: calc(100vh - 97px); overflow: hidden; display: flex; flex-direction: column; }
+    .tab-content { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+    .tab-content.active { display: flex; }
+
+    /* ── 필터바 ── */
+    .filter-bar {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      padding: 10px 24px; background: #fff; border-bottom: 1px solid #e8eaf0;
+      flex-shrink: 0;
+    }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-label { color: #666; font-size: 12px; white-space: nowrap; }
+    .filter-input {
+      width: 88px; padding: 5px 8px; background: #f8f9fc;
+      border: 1px solid #e0e3ea; border-radius: 5px;
+      color: #1a1a2e; font-size: 12px; text-align: right;
+    }
+    .filter-input:focus { outline: none; border-color: #f59e0b; }
+    .filter-sep { color: #ddd; }
+    .last-collected { margin-left: auto; color: #aaa; font-size: 11px; white-space: nowrap; }
+
+    /* ── 액션바 ── */
+    .action-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 24px; background: #f8f9fc; border-bottom: 1px solid #e8eaf0; flex-shrink: 0;
+    }
+    .result-count { color: #888; font-size: 12px; margin-right: auto; }
+    .result-count strong { color: #f59e0b; font-weight: 700; }
+
+    /* ── 버튼 ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 14px; border: none; border-radius: 7px;
+      cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.17s; white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.38; cursor: not-allowed; }
+    .btn-collect { background: #f3f4f6; color: #374151; border: 1px solid #e0e3ea; }
+    .btn-collect:hover:not(:disabled) { background: #e5e7eb; }
+    .btn-analyze { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .btn-analyze:hover:not(:disabled) { background: #dbeafe; }
+    .btn-write   { background: #f59e0b; color: #fff; }
+    .btn-write:hover:not(:disabled)   { background: #d97706; }
+    .btn-auto    { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .btn-auto.on { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .btn-auto:hover:not(:disabled) { opacity:0.85; }
+    .btn-danger  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .btn-danger:hover:not(:disabled)  { background: #fee2e2; }
+    .btn-gray    { background: #f3f4f6; color: #6b7280; border: 1px solid #e0e3ea; }
+    .btn-gray:hover { background: #e5e7eb; }
+
+    /* ── 진행바 ── */
+    .progress-wrap { height: 3px; background: #e8eaf0; flex-shrink: 0; }
+    .progress-bar  { height: 100%; background: linear-gradient(90deg,#f59e0b,#fbbf24); transition: width 0.3s; width: 0%; }
+
+    /* ── 테이블 ── */
+    .table-wrap { flex: 1; overflow: auto; }
+    .table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+    .table-wrap::-webkit-scrollbar-track { background: #f5f6fa; }
+    .table-wrap::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+    table { width: 100%; border-collapse: collapse; min-width: 1100px; }
+    thead { position: sticky; top: 0; z-index: 10; }
+    thead tr { background: #f8f9fc; }
+    th {
+      padding: 9px 12px; text-align: right; font-size: 11px;
+      font-weight: 700; color: #6b7280; white-space: nowrap;
+      border-bottom: 2px solid #e8eaf0; cursor: pointer; user-select: none; transition: color 0.18s;
+    }
+    th:hover { color: #f59e0b; }
+    th.sort-asc::after  { content: ' ↑'; color: #f59e0b; }
+    th.sort-desc::after { content: ' ↓'; color: #f59e0b; }
+    th:first-child, th:nth-child(2) { text-align: left; }
+
+    tbody tr { border-bottom: 1px solid #f0f1f5; transition: background 0.12s; }
+    tbody tr:hover { background: #fffbeb; }
+    tbody tr.selected { background: #fef9ec; }
+    tbody tr.published-row { background: #fffdf0; }
+
+    td {
+      padding: 9px 12px; font-size: 12px; color: #374151;
+      text-align: right; white-space: nowrap;
+    }
+    td:first-child { width: 36px; text-align: center; }
+    td:nth-child(2) { text-align: left; font-weight: 500; color: #111827; }
+    td:nth-child(3) { color: #9ca3af; font-size: 11px; }
+
+    /* 황색 발행 표시 */
+    .published-kw { color: #b45309 !important; }
+    .badge-new {
+      display: inline-block; font-size: 9px; font-weight: 700;
+      background: #f59e0b; color: #fff; padding: 1px 5px; border-radius: 3px; margin-left: 4px;
+    }
+    .badge-pub {
+      display: inline-block; font-size: 9px; background: #fef3c7; color: #92400e;
+      border: 1px solid #fcd34d; padding: 1px 5px; border-radius: 3px; margin-left: 4px;
+    }
+
+    /* 황금지수 색상 */
+    .gold-high { color: #16a34a; font-weight: 700; }
+    .gold-mid  { color: #f59e0b; font-weight: 600; }
+    .gold-low  { color: #9ca3af; }
+
+    input[type="checkbox"] { accent-color: #f59e0b; width: 14px; height: 14px; cursor: pointer; }
+
+    /* ── 빈 상태 ── */
+    .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; height:260px; color:#c4c9d4; gap:8px; }
+    .empty-state .icon { font-size:36px; }
+    .empty-state p { font-size:14px; color:#9ca3af; }
+    .empty-state small { font-size:11px; }
+
+    /* ── 상태바 ── */
+    .status-bar { padding:6px 24px; font-size:11px; color:#9ca3af; background:#fff; border-top:1px solid #e8eaf0; flex-shrink:0; min-height:28px; }
+
+    /* ── 선택 바 ── */
+    .selected-bar { display:none; align-items:center; gap:10px; padding:8px 24px; background:#fffbeb; border-top:2px solid #f59e0b; flex-shrink:0; }
+    .selected-bar.show { display:flex; }
+    .selected-bar span { font-size:12px; color:#92400e; font-weight:600; }
+
+    /* ── 기록 탭 ── */
+    .history-wrap { flex:1; overflow-y:auto; padding:20px 24px; }
+    .history-wrap::-webkit-scrollbar { width:5px; }
+    .history-wrap::-webkit-scrollbar-thumb { background:#e0e3ea; border-radius:3px; }
+    .history-day { margin-bottom:20px; }
+    .history-day-title { font-size:13px; font-weight:700; color:#374151; padding:8px 0 8px; border-bottom:2px solid #f59e0b; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+    .history-day-count { font-size:11px; background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:10px; font-weight:600; }
+    .history-kw-list { display:flex; flex-wrap:wrap; gap:6px; }
+    .history-kw { padding:5px 12px; background:#f8f9fc; border:1px solid #e8eaf0; border-radius:20px; font-size:12px; color:#374151; }
+    .history-empty { color:#9ca3af; font-size:13px; text-align:center; padding:60px 0; }
+
+    /* ── 글쓰기 탭 ── */
+    .write-layout { display:flex; flex:1; overflow:hidden; }
+    .write-sidebar { width:300px; flex-shrink:0; border-right:1px solid #e8eaf0; overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:14px; background:#fff; }
+    .write-sidebar::-webkit-scrollbar { width:4px; }
+    .write-sidebar::-webkit-scrollbar-thumb { background:#e0e3ea; border-radius:2px; }
+    .write-main { flex:1; display:flex; flex-direction:column; overflow:hidden; padding:18px; gap:10px; background:#f8f9fc; }
+
+    .form-label { font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px; display:block; }
+    .form-input, .form-select, .form-textarea {
+      width:100%; padding:8px 10px; background:#fff;
+      border:1px solid #e0e3ea; border-radius:7px; color:#1a1a2e; font-size:13px;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { outline:none; border-color:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,0.12); }
+    .form-select option { background:#fff; }
+    .form-textarea { resize:vertical; font-family:inherit; min-height:70px; }
+
+    .persona-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+    .persona-btn { padding:7px 5px; background:#f8f9fc; border:1px solid #e0e3ea; border-radius:7px; color:#6b7280; cursor:pointer; font-size:11px; transition:all 0.18s; text-align:center; }
+    .persona-btn.active { border-color:#f59e0b; color:#92400e; background:#fef3c7; font-weight:700; }
+    .persona-btn:hover { border-color:#fcd34d; }
+
+    .upload-area { border:2px dashed #e0e3ea; border-radius:8px; min-height:72px; cursor:pointer; transition:border-color 0.2s; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; color:#c4c9d4; text-align:center; padding:10px; }
+    .upload-area:hover, .upload-area.dragover { border-color:#f59e0b; color:#999; }
+    .photo-grid { display:flex; flex-wrap:wrap; gap:5px; padding:6px 0; }
+    .photo-thumb { position:relative; width:56px; height:56px; }
+    .photo-thumb img { width:100%; height:100%; object-fit:cover; border-radius:5px; }
+    .photo-thumb .rm { position:absolute; top:-4px; right:-4px; background:#ef4444; color:#fff; border:none; border-radius:50%; width:15px; height:15px; font-size:9px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+
+    .result-area { flex:1; background:#fff; border:1px solid #e0e3ea; border-radius:8px; padding:16px; overflow-y:auto; white-space:pre-wrap; font-size:13px; line-height:1.75; min-height:200px; outline:none; color:#1a1a2e; box-shadow:inset 0 1px 3px rgba(0,0,0,0.04); }
+    .result-area:focus { border-color:#f59e0b; }
+    .result-area[contenteditable]:empty::before { content:attr(data-placeholder); color:#c4c9d4; }
+    .result-toolbar { display:flex; align-items:center; justify-content:space-between; }
+    .result-toolbar span { font-size:11px; color:#9ca3af; }
+
+    /* ── 설정 탭 ── */
+    .settings-layout { flex:1; overflow-y:auto; padding:22px 24px; display:grid; grid-template-columns:1fr 1fr; gap:16px; align-content:start; }
+    .settings-layout::-webkit-scrollbar { width:5px; }
+    .settings-layout::-webkit-scrollbar-thumb { background:#e0e3ea; border-radius:3px; }
+    .settings-card { background:#fff; border:1px solid #e8eaf0; border-radius:10px; padding:18px; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+    .settings-card-title { font-size:13px; font-weight:700; color:#f59e0b; margin-bottom:14px; padding-bottom:9px; border-bottom:1px solid #f0f1f5; }
+    .settings-field { margin-bottom:9px; }
+    .settings-field label { display:block; font-size:11px; color:#9ca3af; margin-bottom:3px; }
+    .settings-actions { display:flex; align-items:center; gap:8px; margin-top:10px; }
+    .api-ok  { font-size:11px; color:#16a34a; }
+    .api-err { font-size:11px; color:#dc2626; }
+    .account-item { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:#f8f9fc; border:1px solid #e8eaf0; border-radius:6px; margin-bottom:5px; font-size:12px; }
+    .account-rm { background:none; border:none; color:#dc2626; cursor:pointer; font-size:12px; }
+
+    /* ── 토스트 ── */
+    #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#1a1a2e; color:#fff; padding:9px 18px; border-radius:20px; font-size:12px; z-index:9999; display:none; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+    #toast.err { background:#dc2626; }
+
+    /* ── 키워드 태그 ── */
+    .kw-tag-row { display:flex; flex-wrap:wrap; gap:4px; }
+    .kw-tag { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:#fef3c7; border:1px solid #fcd34d; border-radius:20px; font-size:11px; color:#92400e; }
+    .kw-tag button { background:none; border:none; color:#aaa; cursor:pointer; font-size:11px; padding:0; }
+
+    /* ── 스피너 ── */
+    .spinner { display:inline-block; width:11px; height:11px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── 자동수집 배너 ── */
+    .auto-banner { display:none; background:#f0fdf4; border-bottom:1px solid #bbf7d0; padding:6px 24px; font-size:11px; color:#15803d; align-items:center; gap:8px; flex-shrink:0; }
+    .auto-banner.show { display:flex; }
+    .next-collect-time { font-weight:700; color:#16a34a; }
+  </style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div class="header">
+  <div class="header-left">
+    <span class="header-title">⚡ 황금키워드 <span>도구</span></span>
+  </div>
+  <div class="header-right">
+    <div class="auto-status">
+      <div class="auto-dot" id="autoDot"></div>
+      <span id="autoStatusText">자동수집 꺼짐</span>
+    </div>
+    <span style="font-size:11px;color:#c4c9d4;">|</span>
+    <span style="font-size:11px;color:#9ca3af;" id="headerCount">0개 수집</span>
+  </div>
+</div>
+
+<!-- 탭 -->
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="keyword">🔍 황금키워드 검색</button>
+  <button class="tab-btn" data-tab="write">✏️ 글쓰기</button>
+  <button class="tab-btn" data-tab="history">📅 작성 기록</button>
+  <button class="tab-btn" data-tab="settings">⚙️ 설정</button>
+</div>
+
+<div class="content-area">
+
+  <!-- ════ 키워드 탭 ════ -->
+  <div class="tab-content active" id="tab-keyword">
+
+    <!-- 자동수집 배너 -->
+    <div class="auto-banner" id="autoBanner">
+      ⏰ 자동수집 활성화 중 — 다음 수집: <span class="next-collect-time" id="nextCollectTime">계산 중...</span>
+      <span style="margin-left:auto;cursor:pointer;color:#9ca3af;" id="closeBanner">✕</span>
+    </div>
+
+    <!-- 필터바 -->
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">총검색량 ≥</span>
+        <input class="filter-input" id="fMinSearch" type="number" value="0" min="0">
+      </div>
+      <div class="filter-sep">|</div>
+      <div class="filter-group">
+        <span class="filter-label">황금지수 ≥</span>
+        <input class="filter-input" id="fMinGold" type="number" value="0" min="0" step="0.1">
+      </div>
+      <div class="filter-sep">|</div>
+      <div class="filter-group">
+        <span class="filter-label">블로그문서수 ≤</span>
+        <input class="filter-input" id="fMaxDoc" type="number" value="0" min="0" placeholder="0=제한없음">
+      </div>
+      <div class="filter-sep">|</div>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7280;cursor:pointer;">
+        <input type="checkbox" id="fNewOnly" checked> NEW만
+      </label>
+      <span class="last-collected" id="lastCollected">미수집</span>
+    </div>
+
+    <!-- 액션바 -->
+    <div class="action-bar">
+      <span class="result-count"><strong id="resultCount">0</strong> / <span id="totalCount">0</span>개 결과</span>
+      <button class="btn btn-collect" id="collectBtn">🔄 트렌드 키워드 수집</button>
+      <button class="btn btn-analyze" id="analyzeBtn" disabled>▶ 광고/조회수 수집</button>
+      <button class="btn btn-auto" id="autoBtn">⏰ 자동수집 켜기</button>
+      <button class="btn btn-danger" id="clearBtn">🗑️ 초기화</button>
+      <button class="btn btn-gray" id="goSettings">⚙️ 설정</button>
+    </div>
+
+    <!-- 진행바 -->
+    <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+
+    <!-- 테이블 -->
+    <div class="table-wrap">
+      <table id="kwTable">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="checkAll"></th>
+            <th data-col="keyword">키워드</th>
+            <th data-col="category">카테고리</th>
+            <th data-col="rank">트렌드순위</th>
+            <th data-col="pc">PC검색</th>
+            <th data-col="mobile">모바일검색</th>
+            <th data-col="total">총검색량</th>
+            <th data-col="docCount">블로그문서수</th>
+            <th data-col="goldIndex">황금지수</th>
+            <th data-col="adPc1">PC 1위</th>
+            <th data-col="adPc2">PC 2위</th>
+            <th data-col="adMobile1">모바일 1위</th>
+            <th data-col="adMobile2">모바일 2위</th>
+          </tr>
+        </thead>
+        <tbody id="kwBody">
+          <tr><td colspan="13">
+            <div class="empty-state">
+              <div class="icon">📭</div>
+              <p>수집된 키워드가 없습니다.</p>
+              <small>트렌드 키워드 수집 버튼을 눌러 시작하세요.</small>
+            </div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 선택 바 -->
+    <div class="selected-bar" id="selectedBar">
+      <span id="selectedCount">0개 선택</span>
+      <button class="btn btn-write" id="writeSelectedBtn">✏️ 선택 키워드로 글쓰기</button>
+    </div>
+
+    <div class="status-bar" id="statusMsg">준비됨.</div>
+  </div>
+
+  <!-- ════ 글쓰기 탭 ════ -->
+  <div class="tab-content" id="tab-write">
+    <div class="write-layout">
+      <div class="write-sidebar">
+
+        <div>
+          <span class="form-label">발행 계정</span>
+          <select class="form-select" id="accountSelect"><option value="">계정 선택</option></select>
+        </div>
+
+        <div>
+          <span class="form-label">키워드</span>
+          <div style="display:flex;gap:5px;margin-bottom:6px;">
+            <input class="form-input" id="writeKwInput" placeholder="키워드 입력 후 Enter" style="flex:1">
+            <button class="btn btn-collect" id="addKwBtn" style="padding:7px 10px;">추가</button>
+          </div>
+          <div class="kw-tag-row" id="writeKwTags"></div>
+        </div>
+
+        <div>
+          <span class="form-label">글쓰기 스타일</span>
+          <div class="persona-grid" id="personaGrid">
+            <button class="persona-btn active" data-p="trend">트렌드 정보형</button>
+            <button class="persona-btn" data-p="food">맛집 정보형</button>
+            <button class="persona-btn" data-p="travel">여행 감성형</button>
+            <button class="persona-btn" data-p="cafe">카페 감성형</button>
+            <button class="persona-btn" data-p="it">IT/가젯 정보형</button>
+            <button class="persona-btn" data-p="daily">일상/브이로그</button>
+          </div>
+        </div>
+
+        <div>
+          <span class="form-label">사진 첨부 (선택)</span>
+          <div class="upload-area" id="uploadArea">
+            <input type="file" id="photoInput" multiple accept="image/jpeg,image/png,image/webp" style="display:none">
+            <div id="uploadPlaceholder">📁<br><span style="font-size:11px;">클릭 또는 드래그</span></div>
+            <div class="photo-grid" id="photoGrid"></div>
+          </div>
+        </div>
+
+        <div>
+          <span class="form-label">참고 내용 (선택)</span>
+          <textarea class="form-textarea" id="refText" placeholder="가게명, 주소, 메뉴, 가격 등..."></textarea>
+        </div>
+
+        <div>
+          <span class="form-label">AI 모델</span>
+          <select class="form-select" id="aiModel">
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="openai">GPT-4o (OpenAI)</option>
+          </select>
+        </div>
+
+        <button class="btn btn-write" id="generateBtn" style="width:100%;padding:10px;font-size:13px;justify-content:center;">🤖 글 생성하기</button>
+      </div>
+
+      <div class="write-main">
+        <div class="result-toolbar">
+          <span id="charCount" style="font-size:11px;color:#9ca3af;">0자</span>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-collect" id="copyBtn">📋 복사</button>
+            <button class="btn btn-collect" id="regenBtn">🔄 재생성</button>
+            <button class="btn btn-write" id="publishBtn">🚀 발행</button>
+          </div>
+        </div>
+        <div class="result-area" id="resultArea" contenteditable="true"
+             data-placeholder="키워드를 선택하고 글 생성하기를 누르면 여기에 네이버 블로그용 글이 생성됩니다."></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ 작성 기록 탭 ════ -->
+  <div class="tab-content" id="tab-history">
+    <div class="history-wrap" id="historyWrap">
+      <div class="history-empty">📝 아직 작성 기록이 없습니다.</div>
+    </div>
+  </div>
+
+  <!-- ════ 설정 탭 ════ -->
+  <div class="tab-content" id="tab-settings">
+    <div class="settings-layout">
+
+      <div class="settings-card">
+        <div class="settings-card-title">⚡ 네이버 광고 API</div>
+        <div class="settings-field"><label>Customer ID</label><input class="form-input" id="sNaverCid" placeholder="naver-xxx-xxx"></div>
+        <div class="settings-field"><label>Access License</label><input class="form-input" id="sNaverLic" placeholder="Access License"></div>
+        <div class="settings-field"><label>Secret Key</label><input class="form-input" type="password" id="sNaverSecret" placeholder="Secret Key"></div>
+        <div class="settings-actions">
+          <button class="btn btn-analyze" id="testNaverBtn">🔗 연결 테스트</button>
+          <span id="naverTestResult"></span>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">🤖 AI API 키</div>
+        <div class="settings-field"><label>Claude API 키 (Anthropic)</label><input class="form-input" type="password" id="sClaudeKey" placeholder="sk-ant-api03-..."></div>
+        <div class="settings-field"><label>OpenAI API 키</label><input class="form-input" type="password" id="sOpenaiKey" placeholder="sk-..."></div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">📝 블로그 계정 관리</div>
+        <div id="accountList"></div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <input class="form-input" id="newAccountInput" placeholder="네이버 아이디" style="flex:1">
+          <button class="btn btn-collect" id="addAccountBtn">➕ 추가</button>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">⏰ 자동수집 설정</div>
+        <div class="settings-field">
+          <label>자동수집 시각 (기본: 오전 6시)</label>
+          <input class="form-input" type="time" id="sAutoTime" value="06:00">
+        </div>
+        <div class="settings-field">
+          <label>추가 수집 간격 (분, 0=비활성)</label>
+          <input class="form-input" type="number" id="sAutoInterval" value="0" min="0" placeholder="0=비활성">
+        </div>
+        <p style="font-size:11px;color:#9ca3af;margin-top:6px;">💡 오전 6시경 새 트렌드 키워드가 생성됩니다.<br>자동수집을 켜두면 자동으로 수집 후 알림을 드립니다.</p>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">⚙️ 수집 설정</div>
+        <div class="settings-field"><label>최대 트렌드 순위</label><input class="form-input" type="number" id="sMaxRank" value="20" min="1" max="100"></div>
+        <div class="settings-field"><label>최소 상승 순위</label><input class="form-input" type="number" id="sMinRise" value="0" min="0"></div>
+      </div>
+
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;">
+        <button class="btn btn-write" id="saveSettingsBtn" style="padding:10px 24px;">💾 설정 저장</button>
+        <span id="saveMsg" style="font-size:12px;color:#16a34a;display:none;">✅ 저장되었습니다.</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+<script src="main.js"></script>
+</body>
+</html>
