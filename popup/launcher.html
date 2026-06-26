@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!-- 런처: 클릭 시 독립 창 열기 -->
+<html>
+<head>
+<meta charset="UTF-8">
+<title>황금키워드 도구</title>
+<style>
+  body { width: 200px; padding: 12px; font-family: sans-serif; font-size: 13px; text-align: center; }
+  button { width: 100%; padding: 10px; background: #f59e0b; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  button:hover { background: #d97706; }
+  .hint { font-size: 11px; color: #aaa; margin-top: 8px; }
+</style>
+</head>
+<body>
+<button id="openBtn">⚡ 황금키워드 열기</button>
+<p class="hint">클릭하면 큰 창으로 열립니다</p>
+<script>
+// 자동 실행 시도 (첫 클릭 없이 바로 열기)
+async function openMain() {
+  const url = chrome.runtime.getURL('window/main.html');
+  
+  // 이미 열려있는지 확인
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.url && tab.url.includes('window/main.html')) {
+      await chrome.windows.update(tab.windowId, { focused: true });
+      return;
+    }
+  }
+  
+  // 새 창으로 열기
+  chrome.windows.create({
+    url: url,
+    type: 'popup',
+    width: 1400,
+    height: 820,
+    focused: true
+  });
+}
+
+// 팝업이 열리면 즉시 시도
+openMain();
+
+// 버튼 클릭으로도 열 수 있게
+document.getElementById('openBtn').addEventListener('click', openMain);
+</script>
+</body>
+</html>
