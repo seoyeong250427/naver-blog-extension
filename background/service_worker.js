@@ -58,15 +58,23 @@ async function analyzeKeyword({ keyword, naverCustomerId, naverAccessLicense, na
     const goldIndex = (total > 0 && docCount > 0)
       ? parseFloat(((total / docCount) * 100).toFixed(1))
       : null;
-    return { success: true, data: { pc: adData.pc||0, mobile: adData.mobile||0, total, docCount, goldIndex, adPc1:null, adPc2:null, adMobile1:null, adMobile2:null } };
+    return {
+      success: true,
+      data: { pc: adData.pc||0, mobile: adData.mobile||0, total, docCount, goldIndex,
+              adPc1:null, adPc2:null, adMobile1:null, adMobile2:null }
+    };
   } catch(e) {
     return { success: false, error: e.message };
   }
 }
 
 async function getAdData(keyword, customerId, license, secret) {
-  const method = 'GET', path = '/keywordstool';
-  const timestamp = Date.now().toString();
+  const method = 'GET';
+  const path   = '/keywordstool';
+
+  // ✅ 타임스탬프: 밀리초 단위
+  const timestamp = String(Date.now());
+
   const sig = await makeSignature(timestamp, method, path, secret);
   const params = new URLSearchParams({ hintKeywords: keyword, showDetail: '1' });
 
@@ -83,13 +91,13 @@ async function getAdData(keyword, customerId, license, secret) {
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`광고 API ${res.status}: ${body.slice(0,100)}`);
+    throw new Error(`광고 API ${res.status}: ${body.slice(0, 150)}`);
   }
 
   const data = await res.json();
   const item = data.keywordList?.find(k => k.relKeyword === keyword) || data.keywordList?.[0];
-  if (!item) return { pc:0, mobile:0 };
-  return { pc: item.monthlyPcQcCnt||0, mobile: item.monthlyMobileQcCnt||0 };
+  if (!item) return { pc: 0, mobile: 0 };
+  return { pc: item.monthlyPcQcCnt || 0, mobile: item.monthlyMobileQcCnt || 0 };
 }
 
 async function getBlogDocCount(keyword) {
@@ -100,17 +108,23 @@ async function getBlogDocCount(keyword) {
     );
     const html = await res.text();
     const m1 = html.match(/총\s*([\d,]+)\s*개/);
-    if (m1) return parseInt(m1[1].replace(/,/g,''));
+    if (m1) return parseInt(m1[1].replace(/,/g, ''));
     const m2 = html.match(/(\d[\d,]*)\s*건/);
-    if (m2) return parseInt(m2[1].replace(/,/g,''));
+    if (m2) return parseInt(m2[1].replace(/,/g, ''));
     return 0;
   } catch { return 0; }
 }
 
+// ✅ HMAC-SHA256 서명 생성
 async function makeSignature(timestamp, method, path, secret) {
-  const msg = `${timestamp}.${method}.${path}`;
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name:'HMAC', hash:'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg));
+  const message = `${timestamp}.${method}.${path}`;
+  const enc     = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
