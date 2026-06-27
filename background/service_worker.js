@@ -25,16 +25,96 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ── 트렌드 수집 ──────────────────────────────────────────────────────
 async function collectNaverTrends(options) {
+  // 방법1: 네이버 검색 API로 실시간 인기 검색어 수집
+  const settings = await chrome.storage.local.get(['settings']);
+  const clientId = settings.settings?.naverClientId;
+  const clientSecret = settings.settings?.naverClientSecret;
+
+  if (clientId && clientSecret) {
+    try {
+      const keywords = await getTrendKeywordsFromAPI(clientId, clientSecret, options);
+      if (keywords && keywords.length > 0) return { success: true, keywords };
+    } catch(e) {
+      console.warn('API 수집 실패, 크롤링 시도:', e.message);
+    }
+  }
+
+  // 방법2: 네이버 트렌드 페이지 크롤링
+  let tab = null;
+  try {
+    tab = await chrome.tabs.create({ url: 'https://trends.naver.com', active: false });
+    await waitTabLoad(tab.id, 15000);
+    await new Promise(r => setTimeout(r, 2000));
+
+    let keywords = null;
+    try {
+      keywords = await chrome.tabs.sendMessage(tab.id, { type: 'GET_TREND_KEYWORDS', options });
+    } catch(e) {
       try {
-              const tab = await chrome.tabs.create({ url: 'https://trends.naver.com', active: false });
-              await waitTabLoad(tab.id, 10000);
-              const keywords = await chrome.tabs.sendMessage(tab.id, { type: 'GET_TREND_KEYWORDS', options });
-              await chrome.tabs.remove(tab.id);
-              if (keywords && keywords.length > 0) return { success: true, keywords };
-              return { success: false, error: '키워드를 가져오지 못했습니다. 네이버에 로그인되어 있는지 확인하세요.' };
-      } catch(e) {
-              return { success: false, error: e.message };
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content/trends_content.js']
+        });
+        await new Promise(r => setTimeout(r, 1000));
+        keywords = await chrome.tabs.sendMessage(tab.id, { type: 'GET_TREND_KEYWORDS', options });
+      } catch(e2) {
+        console.error('크롤링 실패:', e2.message);
       }
+    }
+
+    await chrome.tabs.remove(tab.id);
+    if (keywords && keywords.length > 0) return { success: true, keywords };
+    return { success: false, error: '키워드를 가져오지 못했습니다. 설정에서 네이버 검색 API 키를 입력하면 더 잘 동작합니다.' };
+  } catch(e) {
+    if (tab) await chrome.tabs.remove(tab.id).catch(() => {});
+    return { success: false, error: e.message };
+  }
+}
+
+// 네이버 검색 API로 트렌드 키워드 수집
+async function getTrendKeywordsFromAPI(clientId, clientSecret, options) {
+  const categories = [
+    'ALL', 'SOCIETY', 'LIFE', 'WORLD', 'CULTURE',
+    'TRAVEL', 'FOOD', 'SPORTS', 'ENTERTAINMENT'
+  ];
+
+  const keywords = [];
+  const seen = new Set();
+
+  for (const category of categories) {
+    try {
+      const res = await fetch(
+        `https://openapi.naver.com/v1/search/trend.json?category=${category}&timeUnit=date`,
+        {
+          headers: {
+            'X-Naver-Client-Id': clientId,
+            'X-Naver-Client-Secret': clientSecret
+          }
+        }
+      );
+
+      if (!res.ok) continue;
+      const data = await res.json();
+      
+      if (data.results) {
+        for (const item of data.results) {
+          const kw = item.keyword || item.title;
+          if (kw && !seen.has(kw)) {
+            seen.add(kw);
+            keywords.push({
+              keyword: kw,
+              isNew: true,
+              rank: keywords.length + 1,
+              category: category,
+              collectedAt: Date.now()
+            });
+          }
+        }
+      }
+    } catch(e) { continue; }
+  }
+
+  return keywords;
 }
 
 function waitTabLoad(tabId, timeout) {
