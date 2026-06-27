@@ -25,28 +25,88 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // ── 트렌드 수집 ──────────────────────────────────────────────────────
 async function collectNaverTrends(options) {
   let tab = null;
-  try {
-    // 네이버 트렌드 페이지를 백그라운드 탭으로 열기
-    tab = await chrome.tabs.create({ url: 'https://trends.naver.com', active: false });
-    
-    // 페이지 완전 로드 대기
-    await waitForTabLoad(tab.id, 15000);
-    await new Promise(r => setTimeout(r, 2000));
+  let isNewTab = false;
 
-    // content script로 키워드 수집 요청
-    const keywords = await chrome.tabs.sendMessage(tab.id, { 
-      type: 'GET_TREND_KEYWORDS', 
-      options 
+  try {
+    // 이미 열려있는 네이버 탭 찾기
+    const naverTabs = await chrome.tabs.query({ url: 'https://*.naver.com/*' });
+    
+    if (naverTabs.length > 0) {
+      // 기존 네이버 탭에서 스크립트 실행
+      tab = naverTabs[0];
+      isNewTab = false;
+    } else {
+      // 없으면 새 탭 열기
+      tab = await chrome.tabs.create({ url: 'https://naver.com', active: false });
+      isNewTab = true;
+      await waitForTabLoad(tab.id, 10000);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // scripting API로 직접 코드 실행 (content script 없이)
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: async (opts) => {
+        const { newOnly = true, maxRank = 20 } = opts;
+        const categories = [
+          { id: '100', name: '비즈니스/경제' }, { id: '101', name: '맛집' },
+          { id: '102', name: '세계여행' },      { id: '103', name: '패션/미용' },
+          { id: '104', name: '상품리뷰' },      { id: '105', name: '육아/결혼' },
+          { id: '106', name: '일상/생각' },     { id: '107', name: '국내여행' },
+          { id: '108', name: '건강/의학' },     { id: '109', name: '요리/레시피' },
+          { id: '110', name: '교육/학문' },     { id: '111', name: 'IT/컴퓨터' },
+          { id: '112', name: '인테리어/DIY' },  { id: '113', name: '자동차' },
+          { id: '114', name: '스타/연예인' },   { id: '115', name: '방송' },
+          { id: '116', name: '취미' },          { id: '117', name: '스포츠' },
+          { id: '118', name: '게임' },          { id: '119', name: '사회/정치' },
+          { id: '120', name: '영화' },          { id: '121', name: '드라마' },
+          { id: '122', name: '여학/외국어' },   { id: '123', name: '문학/책' },
+          { id: '124', name: '반려동물' },      { id: '125', name: '음악' },
+          { id: '126', name: '공연/전시' },     { id: '127', name: '쫄은글/이미지' },
+          { id: '128', name: '원예/재배' },     { id: '129', name: '사진' },
+          { id: '130', name: '만화/애니' },     { id: '131', name: '미술/디자인' }
+        ];
+
+        const results = [];
+        const seen = new Set();
+
+        for (const cat of categories) {
+          try {
+            const res = await fetch(
+              `https://trends.naver.com/trends/keywordsChartList.naver?period=DAILY&categoryId=${cat.id}`,
+              { credentials: 'include', headers: { 'Accept': 'application/json' } }
+            );
+            if (!res.ok) continue;
+            const data = await res.json();
+            for (const item of (data.keywordList || [])) {
+              if (item.rank > maxRank) continue;
+              if (newOnly && !item.isNew) continue;
+              if (!item.keyword || seen.has(item.keyword)) continue;
+              seen.add(item.keyword);
+              results.push({
+                keyword: item.keyword,
+                isNew: item.isNew || false,
+                rank: item.rank || results.length + 1,
+                category: cat.name,
+                collectedAt: Date.now()
+              });
+            }
+          } catch(e) { continue; }
+          await new Promise(r => setTimeout(r, 100));
+        }
+        return results;
+      },
+      args: [options]
     });
 
-    await chrome.tabs.remove(tab.id);
+    if (isNewTab) await chrome.tabs.remove(tab.id).catch(() => {});
 
-    if (keywords && keywords.length > 0) {
-      return { success: true, keywords };
-    }
+    const keywords = results[0]?.result;
+    if (keywords && keywords.length > 0) return { success: true, keywords };
     return { success: false, error: '키워드를 가져오지 못했습니다. 네이버에 로그인되어 있는지 확인하세요.' };
+
   } catch(e) {
-    if (tab) await chrome.tabs.remove(tab.id).catch(() => {});
+    if (isNewTab && tab) await chrome.tabs.remove(tab.id).catch(() => {});
     return { success: false, error: e.message };
   }
 }
