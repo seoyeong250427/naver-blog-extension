@@ -2,25 +2,24 @@
 
 // ── 아이콘 클릭 시 바로 큰 창 열기 ──────────────────────────────────
 chrome.action.onClicked.addListener(async () => {
-      const url = chrome.runtime.getURL('window/main.html');
-      const allWindows = await chrome.windows.getAll({ populate: true });
-      for (const win of allWindows) {
-              for (const tab of (win.tabs || [])) {
-                        if (tab.url && tab.url.includes('window/main.html')) {
-                                    await chrome.windows.update(win.id, { focused: true });
-                                    return;
-                        }
-              }
+  const url = chrome.runtime.getURL('window/main.html');
+  const allWindows = await chrome.windows.getAll({ populate: true });
+  for (const win of allWindows) {
+    for (const tab of (win.tabs || [])) {
+      if (tab.url && tab.url.includes('window/main.html')) {
+        await chrome.windows.update(win.id, { focused: true });
+        return;
       }
-      chrome.windows.create({ url, type: 'popup', width: 1400, height: 820, focused: true });
+    }
+  }
+  chrome.windows.create({ url, type: 'popup', width: 1400, height: 820, focused: true });
 });
 
 // ── 메시지 핸들러 ────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-      if (msg.type === 'COLLECT_TRENDS')    { collectNaverTrends(msg.options).then(sendResponse); return true; }
-      if (msg.type === 'ANALYZE_KEYWORD')   { analyzeKeyword(msg).then(sendResponse); return true; }
-      if (msg.type === 'TEST_NAVER_SEARCH') { testNaverSearch(msg).then(sendResponse); return true; }
-      if (msg.type === 'TEST_NAVER_API')    { testNaverApi(msg).then(sendResponse); return true; }
+  if (msg.type === 'COLLECT_TRENDS')  { collectNaverTrends(msg.options).then(sendResponse); return true; }
+  if (msg.type === 'ANALYZE_KEYWORD') { analyzeKeyword(msg).then(sendResponse); return true; }
+  if (msg.type === 'TEST_NAVER_API')  { testNaverApi(msg).then(sendResponse); return true; }
 });
 
 // ── 트렌드 수집 ──────────────────────────────────────────────────────
@@ -34,7 +33,7 @@ async function collectNaverTrends(options) {
   }
 
   try {
-    const keywords = await getTrendKeywordsFromDataLab(clientId, clientSecret, options);
+    const keywords = await collectTrendKeywords(clientId, clientSecret, options);
     if (keywords && keywords.length > 0) return { success: true, keywords };
     return { success: false, error: '수집된 키워드가 없습니다.' };
   } catch(e) {
@@ -42,96 +41,92 @@ async function collectNaverTrends(options) {
   }
 }
 
-async function getTrendKeywordsFromDataLab(clientId, clientSecret, options) {
-  const { newOnly = true, maxRank = 20 } = options;
+async function collectTrendKeywords(clientId, clientSecret, options) {
+  const { maxRank = 20 } = options;
   const results = [];
   const seen = new Set();
 
-  // 네이버 실시간 급상승 검색어 (공개 API)
-  const url = 'https://openapi.naver.com/v1/search/trend.json';
-  
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'X-Naver-Client-Id': clientId,
-        'X-Naver-Client-Secret': clientSecret
-      }
-    });
+  // 네이버 뉴스 검색으로 트렌드 키워드 수집
+  const queries = ['오늘 뉴스', '실시간 이슈', '화제', '최신 트렌드'];
 
+  for (const q of queries) {
+    try {
+      const res = await fetch(
+        `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(q)}&display=20&sort=date`,
+        {
+          headers: {
+            'X-Naver-Client-Id': clientId,
+            'X-Naver-Client-Secret': clientSecret
+          }
+        }
+      );
+
+      if (!res.ok) continue;
+      const data = await res.json();
+
+      for (const item of (data.items || [])) {
+        const title = item.title.replace(/<[^>]+>/g, '').trim();
+        // 2~8글자 키워드 추출
+        const words = title.split(/[\s,·]+/).filter(w => w.length >= 2 && w.length <= 8 && /[가-힣]/.test(w));
+        for (const word of words.slice(0, 2)) {
+          if (!seen.has(word) && results.length < maxRank * 2) {
+            seen.add(word);
+            results.push({
+              keyword: word,
+              isNew: true,
+              rank: results.length + 1,
+              category: '뉴스트렌드',
+              collectedAt: Date.now()
+            });
+          }
+        }
+      }
+    } catch(e) { continue; }
+  }
+
+  // 블로그 검색으로 추가 수집
+  try {
+    const res = await fetch(
+      `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent('오늘')}&display=20&sort=date`,
+      {
+        headers: {
+          'X-Naver-Client-Id': clientId,
+          'X-Naver-Client-Secret': clientSecret
+        }
+      }
+    );
     if (res.ok) {
       const data = await res.json();
-      const items = data.results || [];
-      for (let i = 0; i < Math.min(items.length, maxRank); i++) {
-        const kw = items[i].keyword || items[i].title || items[i].name;
-        if (kw && !seen.has(kw)) {
-          seen.add(kw);
-          results.push({
-            keyword: kw,
-            isNew: true,
-            rank: i + 1,
-            category: '트렌드',
-            collectedAt: Date.now()
-          });
+      for (const item of (data.items || [])) {
+        const title = item.title.replace(/<[^>]+>/g, '').trim();
+        const words = title.split(/[\s,·]+/).filter(w => w.length >= 2 && w.length <= 8 && /[가-힣]/.test(w));
+        for (const word of words.slice(0, 2)) {
+          if (!seen.has(word) && results.length < maxRank * 3) {
+            seen.add(word);
+            results.push({
+              keyword: word,
+              isNew: true,
+              rank: results.length + 1,
+              category: '블로그트렌드',
+              collectedAt: Date.now()
+            });
+          }
         }
       }
     }
-  } catch(e) {
-    console.warn('트렌드 API 실패:', e.message);
-  }
+  } catch(e) {}
 
-  // 부족하면 네이버 뉴스 검색으로 보완
-  if (results.length < 10) {
-    const newsKeywords = ['오늘', '최신', '뉴스', '이슈', '화제'];
-    for (const kw of newsKeywords) {
-      try {
-        const res = await fetch(
-          `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(kw)}&display=10&sort=date`,
-          {
-            headers: {
-              'X-Naver-Client-Id': clientId,
-              'X-Naver-Client-Secret': clientSecret
-            }
-          }
-        );
-        if (!res.ok) continue;
-        const data = await res.json();
-        for (const item of (data.items || [])) {
-          // 제목에서 키워드 추출
-          const title = item.title.replace(/<[^>]+>/g, '').trim();
-          const words = title.split(/\s+/).filter(w => w.length >= 2 && w.length <= 10);
-          for (const word of words.slice(0, 3)) {
-            if (!seen.has(word) && results.length < maxRank) {
-              seen.add(word);
-              results.push({
-                keyword: word,
-                isNew: true,
-                rank: results.length + 1,
-                category: '뉴스',
-                collectedAt: Date.now()
-              });
-            }
-          }
-        }
-      } catch(e) { continue; }
-    }
-  }
-
-  return results;
+  return results.slice(0, maxRank);
 }
 
-
+// ── 키워드 분석 ──────────────────────────────────────────────────────
 async function analyzeKeyword({ keyword, naverClientId, naverClientSecret }) {
   try {
-    // 1) 데이터랩 API로 검색 트렌드 조회
-    const trendData = await getDataLabTrend(keyword, naverClientId, naverClientSecret);
-    
-    // 2) 네이버 검색 API로 블로그 문서수 조회
     const docCount = await getBlogDocCount(keyword, naverClientId, naverClientSecret);
-    
-    // 3) 황금지수 계산 (트렌드 비율 / 블로그문서수 * 1000)
-    const trendRatio = trendData.ratio || 0;
-    const goldIndex = (trendRatio > 0 && docCount > 0)
-      ? parseFloat(((trendRatio / docCount) * 100000).toFixed(1))
+    const trendData = await getDataLabTrend(keyword, naverClientId, naverClientSecret);
+    const total = (trendData.pc || 0) + (trendData.mobile || 0);
+    const goldIndex = (total > 0 && docCount > 0)
+      ? parseFloat(((total / docCount) * 100).toFixed(1))
       : null;
 
     return {
@@ -139,7 +134,7 @@ async function analyzeKeyword({ keyword, naverClientId, naverClientSecret }) {
       data: {
         pc: trendData.pc || 0,
         mobile: trendData.mobile || 0,
-        total: (trendData.pc || 0) + (trendData.mobile || 0),
+        total,
         docCount,
         goldIndex,
         adPc1: null, adPc2: null, adMobile1: null, adMobile2: null
@@ -150,176 +145,89 @@ async function analyzeKeyword({ keyword, naverClientId, naverClientSecret }) {
   }
 }
 
-// 데이터랩 검색어트렌드 API
+// ── 데이터랩 트렌드 조회 ─────────────────────────────────────────────
 async function getDataLabTrend(keyword, clientId, clientSecret) {
-  if (!clientId || !clientSecret) throw new Error('네이버 검색 API 키를 설정에서 입력하세요.');
+  if (!clientId || !clientSecret) return { pc: 0, mobile: 0 };
 
   const now = new Date();
   const endDate = now.toISOString().slice(0, 10);
   const startDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const body = JSON.stringify({
-    startDate,
-    endDate,
-    timeUnit: 'month',
-    keywordGroups: [{ groupName: keyword, keywords: [keyword] }],
-    device: 'pc'
-  });
+  let pc = 0, mobile = 0;
 
-  const resPc = await fetch('https://openapi.naver.com/v1/datalab/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Naver-Client-Id': clientId,
-      'X-Naver-Client-Secret': clientSecret
-    },
-    body
-  });
+  try {
+    const resPc = await fetch('https://openapi.naver.com/v1/datalab/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret
+      },
+      body: JSON.stringify({
+        startDate, endDate, timeUnit: 'month',
+        keywordGroups: [{ groupName: keyword, keywords: [keyword] }],
+        device: 'pc'
+      })
+    });
 
-  const bodyMobile = JSON.stringify({
-    startDate,
-    endDate,
-    timeUnit: 'month',
-    keywordGroups: [{ groupName: keyword, keywords: [keyword] }],
-    device: 'mo'
-  });
-
-  const resMobile = await fetch('https://openapi.naver.com/v1/datalab/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Naver-Client-Id': clientId,
-      'X-Naver-Client-Secret': clientSecret
-    },
-    body: bodyMobile
-  });
-
-  let pc = 0, mobile = 0, ratio = 0;
-
-  if (resPc.ok) {
-    const d = await resPc.json();
-    const data = d.results?.[0]?.data;
-    if (data && data.length > 0) {
-      pc = Math.round(data[data.length - 1].ratio * 1000);
-      ratio += data[data.length - 1].ratio;
+    if (resPc.ok) {
+      const d = await resPc.json();
+      const data = d.results?.[0]?.data;
+      if (data?.length > 0) pc = Math.round(data[data.length - 1].ratio * 1000);
     }
-  }
 
-  if (resMobile.ok) {
-    const d = await resMobile.json();
-    const data = d.results?.[0]?.data;
-    if (data && data.length > 0) {
-      mobile = Math.round(data[data.length - 1].ratio * 1000);
-      ratio += data[data.length - 1].ratio;
+    const resMo = await fetch('https://openapi.naver.com/v1/datalab/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret
+      },
+      body: JSON.stringify({
+        startDate, endDate, timeUnit: 'month',
+        keywordGroups: [{ groupName: keyword, keywords: [keyword] }],
+        device: 'mo'
+      })
+    });
+
+    if (resMo.ok) {
+      const d = await resMo.json();
+      const data = d.results?.[0]?.data;
+      if (data?.length > 0) mobile = Math.round(data[data.length - 1].ratio * 1000);
     }
-  }
+  } catch(e) {}
 
-  return { pc, mobile, ratio };
+  return { pc, mobile };
 }
 
-// ── 구버전 (사용 안 함) ──
-async function analyzeKeyword({ keyword, naverCustomerId, naverAccessLicense, naverSecretKey, naverClientId, naverClientSecret }) {
-      try {
-              const adData = await getAdData(keyword, naverCustomerId, naverAccessLicense, naverSecretKey);
-              const docCount = await getBlogDocCount(keyword, naverClientId, naverClientSecret);
-              const total = (adData.pc || 0) + (adData.mobile || 0);
-              const goldIndex = (total > 0 && docCount > 0)
-                ? parseFloat(((total / docCount) * 100).toFixed(1))
-                        : null;
-              return {
-                        success: true,
-                        data: { pc: adData.pc||0, mobile: adData.mobile||0, total, docCount, goldIndex,
-                                             adPc1: null, adPc2: null, adMobile1: null, adMobile2: null }
-              };
-      } catch(e) {
-              return { success: false, error: e.message };
-      }
-}
-
-// ── 네이버 광고 API 데이터 조회 ──────────────────────────────────────
-async function getAdData(keyword, customerId, license, secret) {
-      const method = 'GET';
-      const path = '/keywordstool';
-      const timestamp = String(Date.now());
-
-  // ✅ 공식 문서 방식: Secret Key를 Base64 디코딩 후 HMAC 키로 사용
-  const sig = await makeSignature(timestamp, method, path, secret);
-
-  const params = new URLSearchParams({ hintKeywords: keyword, showDetail: '1' });
-
-  const res = await fetch(`https://manage.searchad.naver.com${path}?${params}`, {
-          method,
-          headers: {
-                    'X-Timestamp': timestamp,
-                    'X-API-KEY': license,
-                    'X-Customer': String(customerId),
-                    'X-Signature': sig
-          }
-  });
-
-  if (!res.ok) {
-          const body = await res.text().catch(() => '');
-          throw new Error(`광고 API ${res.status}: ${body.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-      const item = data.keywordList?.find(k => k.relKeyword === keyword) || data.keywordList?.[0];
-      if (!item) return { pc: 0, mobile: 0 };
-      return {
-              pc: item.monthlyPcQcCnt || 0,
-              mobile: item.monthlyMobileQcCnt || 0
-      };
-}
-
-// ── 블로그 문서수 조회 ──────────────────────────────────────────────
+// ── 블로그 문서수 조회 ───────────────────────────────────────────────
 async function getBlogDocCount(keyword, clientId, clientSecret) {
-      if (clientId && clientSecret) {
-              try {
-                        const res = await fetch(
-                                    `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(keyword)}&display=1`,
-                            {
-                                          headers: {
-                                                          'X-Naver-Client-Id': clientId,
-                                                          'X-Naver-Client-Secret': clientSecret
-                                          }
-                            }
-                                  );
-                        if (res.ok) {
-                                    const data = await res.json();
-                                    return data.total || 0;
-                        }
-              } catch(e) { /* fallback */ }
+  if (clientId && clientSecret) {
+    try {
+      const res = await fetch(
+        `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(keyword)}&display=1`,
+        { headers: { 'X-Naver-Client-Id': clientId, 'X-Naver-Client-Secret': clientSecret } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        return data.total || 0;
       }
-      try {
-              const res = await fetch(
-                        `https://search.naver.com/search.naver?where=blog&query=${encodeURIComponent(keyword)}`,
-                  { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124' } }
-                      );
-              const html = await res.text();
-              const m1 = html.match(/총\s*([\d,]+)\s*개/);
-              if (m1) return parseInt(m1[1].replace(/,/g, ''));
-              const m2 = html.match(/"totalCount"\s*:\s*(\d+)/);
-              if (m2) return parseInt(m2[1]);
-              return 0;
-      } catch { return 0; }
+    } catch(e) {}
+  }
+
+  try {
+    const res = await fetch(
+      `https://search.naver.com/search.naver?where=blog&query=${encodeURIComponent(keyword)}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    const html = await res.text();
+    const m = html.match(/총\s*([\d,]+)\s*개/);
+    if (m) return parseInt(m[1].replace(/,/g, ''));
+    return 0;
+  } catch { return 0; }
 }
 
-// ── HMAC-SHA256 서명 생성 (공식 문서 방식) ──────────────────────────
-// 네이버 공식 샘플: HMACSHA256(secretKey바이트).ComputeHash(message바이트) → Base64
-// Secret Key가 Base64 인코딩된 값이므로 먼저 디코딩 후 HMAC 키로 사용
-async function makeSignature(timestamp, method, path, secret) {
-      const message = `${timestamp}.${method}.${path}`;
-      const enc = new TextEncoder();
-      const msgData = enc.encode(message);
-
-  // Secret Key를 UTF-8 bytes로 직접 사용 (공식 Java/C# 샘플과 동일)
-  const keyData = enc.encode(secret);
-
-  const cryptoKey = await crypto.subtle.importKey(
-          'raw', keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-          false, ['sign']
-        );
-      const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
-      return btoa(String.fromCharCode(...new Uint8Array(signature)));
+// ── API 연결 테스트 ──────────────────────────────────────────────────
+async function testNaverApi({ naverCustomerId, naverAccessLicense, naverSecretKey }) {
+  return { success: false, error: '광고 API는 현재 미사용입니다.' };
 }
