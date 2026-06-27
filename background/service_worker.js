@@ -19,6 +19,7 @@ chrome.action.onClicked.addListener(async () => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'COLLECT_TRENDS')  { collectNaverTrends(msg.options).then(sendResponse); return true; }
   if (msg.type === 'ANALYZE_KEYWORD') { analyzeKeyword(msg).then(sendResponse); return true; }
+  if (msg.type === 'TEST_NAVER_SEARCH') { testNaverSearch(msg).then(sendResponse); return true; }
   if (msg.type === 'TEST_NAVER_API')  { testNaverApi(msg).then(sendResponse); return true; }
 });
 
@@ -50,10 +51,10 @@ function waitTabLoad(tabId, timeout) {
 }
 
 // ── 키워드 분석 ──────────────────────────────────────────────────────
-async function analyzeKeyword({ keyword, naverCustomerId, naverAccessLicense, naverSecretKey }) {
+async function analyzeKeyword({ keyword, naverCustomerId, naverAccessLicense, naverSecretKey, naverClientId, naverClientSecret }) {
   try {
     const adData   = await getAdData(keyword, naverCustomerId, naverAccessLicense, naverSecretKey);
-    const docCount = await getBlogDocCount(keyword);
+    const docCount = await getBlogDocCount(keyword, naverClientId, naverClientSecret);
     const total    = (adData.pc || 0) + (adData.mobile || 0);
     const goldIndex = (total > 0 && docCount > 0)
       ? parseFloat(((total / docCount) * 100).toFixed(1))
