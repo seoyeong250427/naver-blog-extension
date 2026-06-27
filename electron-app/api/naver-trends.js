@@ -1,73 +1,194 @@
-// 네이버 데이터랩 트렌드 32개 카테고리 크롤링 모듈
+// 네이버 트렌드 키워드 수집 모듈 - 데이터랩 검색어 트렌드 기반
 const axios = require('axios');
 
-// 네이버 데이터랩 쇼핑 인사이트 카테고리 코드 (32개)
+// 네이버 데이터랩 블로그 32개 카테고리
 const CATEGORIES = [
-  { id: '50000000', name: '패션의류' },
-  { id: '50000001', name: '패션잡화' },
-  { id: '50000002', name: '화장품/미용' },
-  { id: '50000003', name: '디지털/가전' },
-  { id: '50000004', name: '가구/인테리어' },
-  { id: '50000005', name: '출산/육아' },
-  { id: '50000006', name: '식품' },
-  { id: '50000007', name: '스포츠/레저' },
-  { id: '50000008', name: '생활/건강' },
-  { id: '50000009', name: '여행/문화' },
-  { id: '50000010', name: '면세점' },
-  { id: '50000011', name: '도서' },
-  { id: '50000012', name: '자동차/공구' },
-  { id: '50000013', name: '반려동물' },
+  { id: '100', name: '정치' },      { id: '101', name: '경제' },
+  { id: '102', name: '사회' },      { id: '103', name: '생활문화' },
+  { id: '104', name: 'IT과학' },    { id: '105', name: '세계' },
+  { id: '106', name: '연예' },      { id: '107', name: '스포츠' },
+  { id: '108', name: '건강' },      { id: '109', name: '여행' },
+  { id: '110', name: '음식' },      { id: '111', name: '패션미용' },
+  { id: '112', name: '인테리어' },  { id: '113', name: '육아' },
+  { id: '114', name: '교육' },      { id: '115', name: '직업' },
+  { id: '116', name: '취미' },      { id: '117', name: '스포츠' },
+  { id: '118', name: '게임' },      { id: '119', name: '사회정치' },
+  { id: '120', name: '영화' },      { id: '121', name: '드라마' },
+  { id: '122', name: '외국어' },    { id: '123', name: '문학책' },
+  { id: '124', name: '반려동물' },  { id: '125', name: '음악' },
+  { id: '126', name: '공연전시' },  { id: '127', name: '이슈' },
+  { id: '128', name: '원예재배' },  { id: '129', name: '사진' },
+  { id: '130', name: '만화애니' },  { id: '131', name: '미술디자인' },
 ];
 
-// 네이버 검색어 트렌드 API (데이터랩)
-const DATALAB_URL = 'https://openapi.naver.com/v1/datalab/search';
-
-// 네이버 쇼핑 인사이트 급상승 키워드 URL
-const SHOPPING_INSIGHT_URL = 'https://openapi.naver.com/v1/datalab/shopping/categories/keywords/ratio';
-
-// 날짜 포맷 헬퍼
-function getDateRange() {
+// 날짜 헬퍼
+function getDateRange(days = 7) {
   const end = new Date();
   const start = new Date();
-  start.setDate(end.getDate() - 7);
+  start.setDate(end.getDate() - days);
   const fmt = (d) => d.toISOString().slice(0, 10);
   return { startDate: fmt(start), endDate: fmt(end) };
 }
 
-// 네이버 실시간 급상승 검색어 (PC/모바일 통합)
-async function fetchRealtimeTrends() {
+// 네이버 데이터랩 검색어 트렌드 - 카테고리별 인기 검색어
+async function fetchCategoryKeywords(clientId, clientSecret) {
+  if (!clientId || !clientSecret) return [];
+
+  const { startDate, endDate } = getDateRange(30);
+  const results = [];
+  const seen = new Set();
+
+  // 카테고리별 대표 키워드를 데이터랩으로 트렌드 확인
+  // 네이버 데이터랩 트렌드 페이지 크롤링
+  for (const cat of CATEGORIES) {
+    try {
+      const res = await axios.get(
+        `https://datalab.naver.com/keyword/trendSearch.naver?categoryId=${cat.id}&timeUnit=date&startDate=${startDate}&endDate=${endDate}`,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://datalab.naver.com/',
+            'Accept': 'application/json, text/plain, */*',
+          },
+          timeout: 8000,
+        }
+      );
+
+      const items = res.data?.keywordList || res.data?.result?.keywordList || [];
+      items.slice(0, 10).forEach((item, i) => {
+        const kw = item.keyword || item.title || '';
+        if (!kw || seen.has(kw)) return;
+        seen.add(kw);
+        results.push({
+          keyword: kw,
+          rank: i + 1,
+          category: cat.name,
+          isNew: item.isNew || false,
+          collectedAt: Date.now(),
+        });
+      });
+
+      await new Promise((r) => setTimeout(r, 150));
+    } catch {}
+  }
+
+  return results;
+}
+
+// 네이버 검색 API로 연관 검색어 수집
+async function fetchRelatedKeywords(seed, clientId, clientSecret) {
   try {
-    // 네이버 실시간 트렌드 비공개 API 활용
     const res = await axios.get(
-      'https://signal.naver.com/v1/search/trend?caller=signalapp&device=all',
-      { timeout: 10000 }
+      `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(seed)}&display=1`,
+      {
+        headers: {
+          'X-Naver-Client-Id': clientId,
+          'X-Naver-Client-Secret': clientSecret,
+        },
+        timeout: 5000,
+      }
     );
-    const items = res.data?.items?.[0]?.data || [];
-    return items.map((item, i) => ({
-      rank: i + 1,
-      keyword: item.title || item.keyword || '',
-      category: '실시간급상승',
-    }));
+    return res.data?.total || 0;
   } catch {
-    return [];
+    return 0;
   }
 }
 
-// 네이버 쇼핑 인사이트 카테고리별 급상승 키워드
-async function fetchCategoryTrends(clientId, clientSecret) {
-  const { startDate, endDate } = getDateRange();
+// 네이버 실시간 트렌드 - trends.naver.com 크롤링
+async function fetchRealtimeTrends() {
   const results = [];
+  const seen = new Set();
 
-  for (const cat of CATEGORIES) {
+  try {
+    const res = await axios.get('https://trends.naver.com/trends/keywordsJson.naver', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://trends.naver.com/',
+        'Accept': 'application/json',
+      },
+      timeout: 8000,
+    });
+
+    const items = res.data?.keywordList || [];
+    items.forEach((item, i) => {
+      const kw = item.keyword || '';
+      if (!kw || seen.has(kw)) return;
+      seen.add(kw);
+      results.push({
+        keyword: kw,
+        rank: i + 1,
+        category: '실시간급상승',
+        isNew: item.isNew || false,
+        collectedAt: Date.now(),
+      });
+    });
+  } catch {}
+
+  // 실패 시 PC/모바일 각각 시도
+  if (results.length === 0) {
+    for (const device of ['pc', 'mobile']) {
+      try {
+        const res = await axios.get(
+          `https://trends.naver.com/trends/keywordsJson.naver?device=${device}`,
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': 'https://trends.naver.com/',
+            },
+            timeout: 8000,
+          }
+        );
+        const items = res.data?.keywordList || [];
+        items.forEach((item, i) => {
+          const kw = item.keyword || '';
+          if (!kw || seen.has(kw)) return;
+          seen.add(kw);
+          results.push({
+            keyword: kw,
+            rank: i + 1,
+            category: device === 'pc' ? 'PC급상승' : '모바일급상승',
+            isNew: item.isNew || false,
+            collectedAt: Date.now(),
+          });
+        });
+      } catch {}
+    }
+  }
+
+  return results;
+}
+
+// 네이버 데이터랩 쇼핑인사이트 카테고리별 급상승
+async function fetchShoppingTrends(clientId, clientSecret) {
+  if (!clientId || !clientSecret) return [];
+
+  const { startDate, endDate } = getDateRange(7);
+  const results = [];
+  const seen = new Set();
+
+  // 쇼핑 대분류 카테고리 코드
+  const shopCats = [
+    { id: '50000000', name: '패션의류' },
+    { id: '50000001', name: '패션잡화' },
+    { id: '50000002', name: '화장품미용' },
+    { id: '50000003', name: '디지털가전' },
+    { id: '50000004', name: '가구인테리어' },
+    { id: '50000005', name: '출산육아' },
+    { id: '50000006', name: '식품' },
+    { id: '50000007', name: '스포츠레저' },
+    { id: '50000008', name: '생활건강' },
+  ];
+
+  for (const cat of shopCats) {
     try {
       const res = await axios.post(
-        SHOPPING_INSIGHT_URL,
+        'https://openapi.naver.com/v1/datalab/shopping/category/keywords',
         {
           startDate,
           endDate,
           timeUnit: 'date',
-          category: [{ name: cat.name, param: [cat.id] }],
-          device: 'pc',
+          category: cat.id,
+          device: '',
           ages: [],
           gender: '',
         },
@@ -77,104 +198,58 @@ async function fetchCategoryTrends(clientId, clientSecret) {
             'X-Naver-Client-Secret': clientSecret,
             'Content-Type': 'application/json',
           },
-          timeout: 10000,
+          timeout: 8000,
         }
       );
 
-      const keywords = res.data?.results?.[0]?.data || [];
-      keywords.slice(0, 10).forEach((item, i) => {
+      const items = res.data?.results?.[0]?.data || [];
+      items.slice(0, 5).forEach((item, i) => {
+        const kw = item.title || item.keyword || '';
+        if (!kw || seen.has(kw)) return;
+        seen.add(kw);
         results.push({
+          keyword: kw,
           rank: i + 1,
-          keyword: item.title || '',
           category: cat.name,
-          ratio: item.ratio || 0,
+          isNew: false,
+          collectedAt: Date.now(),
         });
       });
 
-      // API 레이트 리밋 방지
       await new Promise((r) => setTimeout(r, 200));
-    } catch (err) {
-      console.error(`카테고리 ${cat.name} 수집 실패:`, err.message);
-    }
+    } catch {}
   }
 
   return results;
 }
 
-// 네이버 데이터랩 검색어 트렌드 (키워드 그룹 비교)
-async function fetchDatalabTrends(keywords, clientId, clientSecret) {
-  const { startDate, endDate } = getDateRange();
-
-  // 한 번에 최대 5개 키워드 그룹
-  const chunks = [];
-  for (let i = 0; i < keywords.length; i += 5) {
-    chunks.push(keywords.slice(i, i + 5));
-  }
-
-  const results = [];
-  for (const chunk of chunks) {
-    try {
-      const res = await axios.post(
-        DATALAB_URL,
-        {
-          startDate,
-          endDate,
-          timeUnit: 'date',
-          keywordGroups: chunk.map((kw) => ({
-            groupName: kw,
-            keywords: [kw],
-          })),
-        },
-        {
-          headers: {
-            'X-Naver-Client-Id': clientId,
-            'X-Naver-Client-Secret': clientSecret,
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000,
-        }
-      );
-
-      const items = res.data?.results || [];
-      items.forEach((item) => {
-        const latest = item.data?.[item.data.length - 1];
-        results.push({
-          keyword: item.title,
-          ratio: latest?.ratio || 0,
-          category: '데이터랩',
-        });
-      });
-
-      await new Promise((r) => setTimeout(r, 200));
-    } catch (err) {
-      console.error('데이터랩 트렌드 수집 실패:', err.message);
-    }
-  }
-
-  return results;
-}
-
-// 전체 수집 진입점 - main.js IPC 핸들러에서 호출
+// 전체 수집 진입점
 async function collectAll({ clientId, clientSecret } = {}) {
   const all = [];
+  const seen = new Set();
+
+  const add = (items) => {
+    items.forEach((item) => {
+      if (!item.keyword || seen.has(item.keyword)) return;
+      seen.add(item.keyword);
+      all.push(item);
+    });
+  };
 
   // 1. 실시간 급상승 (인증 불필요)
-  const realtime = await fetchRealtimeTrends();
-  all.push(...realtime);
+  add(await fetchRealtimeTrends());
 
-  // 2. 쇼핑 카테고리별 (clientId/Secret 필요)
+  // 2. 쇼핑 트렌드 (검색 API 키 필요)
   if (clientId && clientSecret) {
-    const category = await fetchCategoryTrends(clientId, clientSecret);
-    all.push(...category);
+    add(await fetchShoppingTrends(clientId, clientSecret));
   }
 
-  // 중복 제거 (keyword 기준)
-  const seen = new Set();
-  return all.filter((item) => {
-    if (seen.has(item.keyword)) return false;
-    seen.add(item.keyword);
-    return true;
-  });
+  // 3. 카테고리별 트렌드
+  if (clientId && clientSecret) {
+    add(await fetchCategoryKeywords(clientId, clientSecret));
+  }
+
+  return all;
 }
 
-module.exports = { collectAll, fetchRealtimeTrends, fetchCategoryTrends, fetchDatalabTrends, CATEGORIES };
+module.exports = { collectAll, fetchRealtimeTrends, fetchShoppingTrends, CATEGORIES };
