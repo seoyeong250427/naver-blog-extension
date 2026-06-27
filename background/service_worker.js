@@ -83,7 +83,105 @@ async function testNaverSearch({ clientId, clientSecret }) {
       }
 }
 
-// ── 키워드 분석 ──────────────────────────────────────────────────────
+// ── 키워드 분석 - 데이터랩 API 사용 ────────────────────────────────
+async function analyzeKeyword({ keyword, naverClientId, naverClientSecret }) {
+  try {
+    // 1) 데이터랩 API로 검색 트렌드 조회
+    const trendData = await getDataLabTrend(keyword, naverClientId, naverClientSecret);
+    
+    // 2) 네이버 검색 API로 블로그 문서수 조회
+    const docCount = await getBlogDocCount(keyword, naverClientId, naverClientSecret);
+    
+    // 3) 황금지수 계산 (트렌드 비율 / 블로그문서수 * 1000)
+    const trendRatio = trendData.ratio || 0;
+    const goldIndex = (trendRatio > 0 && docCount > 0)
+      ? parseFloat(((trendRatio / docCount) * 100000).toFixed(1))
+      : null;
+
+    return {
+      success: true,
+      data: {
+        pc: trendData.pc || 0,
+        mobile: trendData.mobile || 0,
+        total: (trendData.pc || 0) + (trendData.mobile || 0),
+        docCount,
+        goldIndex,
+        adPc1: null, adPc2: null, adMobile1: null, adMobile2: null
+      }
+    };
+  } catch(e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// 데이터랩 검색어트렌드 API
+async function getDataLabTrend(keyword, clientId, clientSecret) {
+  if (!clientId || !clientSecret) throw new Error('네이버 검색 API 키를 설정에서 입력하세요.');
+
+  const now = new Date();
+  const endDate = now.toISOString().slice(0, 10);
+  const startDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const body = JSON.stringify({
+    startDate,
+    endDate,
+    timeUnit: 'month',
+    keywordGroups: [{ groupName: keyword, keywords: [keyword] }],
+    device: 'pc'
+  });
+
+  const resPc = await fetch('https://openapi.naver.com/v1/datalab/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Naver-Client-Id': clientId,
+      'X-Naver-Client-Secret': clientSecret
+    },
+    body
+  });
+
+  const bodyMobile = JSON.stringify({
+    startDate,
+    endDate,
+    timeUnit: 'month',
+    keywordGroups: [{ groupName: keyword, keywords: [keyword] }],
+    device: 'mo'
+  });
+
+  const resMobile = await fetch('https://openapi.naver.com/v1/datalab/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Naver-Client-Id': clientId,
+      'X-Naver-Client-Secret': clientSecret
+    },
+    body: bodyMobile
+  });
+
+  let pc = 0, mobile = 0, ratio = 0;
+
+  if (resPc.ok) {
+    const d = await resPc.json();
+    const data = d.results?.[0]?.data;
+    if (data && data.length > 0) {
+      pc = Math.round(data[data.length - 1].ratio * 1000);
+      ratio += data[data.length - 1].ratio;
+    }
+  }
+
+  if (resMobile.ok) {
+    const d = await resMobile.json();
+    const data = d.results?.[0]?.data;
+    if (data && data.length > 0) {
+      mobile = Math.round(data[data.length - 1].ratio * 1000);
+      ratio += data[data.length - 1].ratio;
+    }
+  }
+
+  return { pc, mobile, ratio };
+}
+
+// ── 구버전 (사용 안 함) ──
 async function analyzeKeyword({ keyword, naverCustomerId, naverAccessLicense, naverSecretKey, naverClientId, naverClientSecret }) {
       try {
               const adData = await getAdData(keyword, naverCustomerId, naverAccessLicense, naverSecretKey);
