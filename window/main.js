@@ -392,7 +392,7 @@ async function analyzeAll() {
     bar.style.width = `${Math.round(((i+1)/targets.length)*100)}%`;
     setStatus(`📊 분석 중 (${i+1}/${targets.length}): ${kw.keyword}`);
     try {
-      const r = await chrome.runtime.sendMessage({ type:'ANALYZE_KEYWORD', keyword:kw.keyword, naverCustomerId:cid, naverAccessLicense:lic, naverSecretKey:sec, naverClientId:S.settings.naverClientId||'', naverClientSecret:S.settings.naverClientSecret||'' });
+      const r = await chrome.runtime.sendMessage({ type:'ANALYZE_KEYWORD', keyword:kw.keyword, naverClientId:S.settings.naverClientId||'', naverClientSecret:S.settings.naverClientSecret||'' });
       if (r.success) { const idx = S.keywords.findIndex(k=>k.keyword===kw.keyword); if (idx!==-1) Object.assign(S.keywords[idx], r.data); }
     } catch(e) {}
     if (i < targets.length-1) await delay(350);
