@@ -727,8 +727,8 @@ function initSettingsTab() {
 
 function loadSettingsUI() {
   const s = S.settings;
-  ['sNaverCid','sNaverLic','sNaverSecret','sClaudeKey','sOpenaiKey','sAutoTime','sAutoInterval','sMaxRank','sMinRise'].forEach(id => {
-    const key = { sNaverCid:'naverCustomerId', sNaverLic:'naverAccessLicense', sNaverSecret:'naverSecretKey', sClaudeKey:'claudeApiKey', sOpenaiKey:'openaiApiKey', sAutoTime:'sAutoTime', sAutoInterval:'sAutoInterval', sMaxRank:'sMaxRank', sMinRise:'sMinRise' }[id];
+  ['sNaverCid','sNaverLic','sNaverSecret','sNaverClientId','sNaverClientSecret','sClaudeKey','sOpenaiKey','sAutoTime','sAutoInterval','sMaxRank','sMinRise'].forEach(id => {
+    const key = { sNaverCid:'naverCustomerId', sNaverLic:'naverAccessLicense', sNaverSecret:'naverSecretKey', sNaverClientId:'naverClientId', sNaverClientSecret:'naverClientSecret', sClaudeKey:'claudeApiKey', sOpenaiKey:'openaiApiKey', sAutoTime:'sAutoTime', sAutoInterval:'sAutoInterval', sMaxRank:'sMaxRank', sMinRise:'sMinRise' }[id];
     if (s[key] != null) document.getElementById(id).value = s[key];
   });
   renderAccountList();
@@ -740,6 +740,8 @@ function saveSettingsUI() {
     naverCustomerId:    document.getElementById('sNaverCid').value.trim(),
     naverAccessLicense: document.getElementById('sNaverLic').value.trim(),
     naverSecretKey:     document.getElementById('sNaverSecret').value.trim(),
+    naverClientId:      document.getElementById('sNaverClientId').value.trim(),
+    naverClientSecret:  document.getElementById('sNaverClientSecret').value.trim(),
     claudeApiKey:       document.getElementById('sClaudeKey').value.trim(),
     openaiApiKey:       document.getElementById('sOpenaiKey').value.trim(),
     sAutoTime:          document.getElementById('sAutoTime').value,
