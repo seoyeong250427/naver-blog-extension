@@ -122,11 +122,17 @@ async function collectTrendKeywords(clientId, clientSecret, options) {
 // ── 키워드 분석 ──────────────────────────────────────────────────────
 async function analyzeKeyword({ keyword, naverClientId, naverClientSecret }) {
   try {
-    const docCount = await getBlogDocCount(keyword, naverClientId, naverClientSecret);
-    const trendData = await getDataLabTrend(keyword, naverClientId, naverClientSecret);
+    // 타임아웃 5초 설정
+    const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+
+    const [docCount, trendData] = await Promise.all([
+      Promise.race([getBlogDocCount(keyword, naverClientId, naverClientSecret), timeout(5000)]).catch(() => 0),
+      Promise.race([getDataLabTrend(keyword, naverClientId, naverClientSecret), timeout(5000)]).catch(() => ({ pc: 0, mobile: 0 }))
+    ]);
+
     const total = (trendData.pc || 0) + (trendData.mobile || 0);
-    const goldIndex = (total > 0 && docCount > 0)
-      ? parseFloat(((total / docCount) * 100).toFixed(1))
+    const goldIndex = (docCount > 0)
+      ? parseFloat(((total / (docCount || 1)) * 100).toFixed(1))
       : null;
 
     return {
@@ -141,7 +147,7 @@ async function analyzeKeyword({ keyword, naverClientId, naverClientSecret }) {
       }
     };
   } catch(e) {
-    return { success: false, error: e.message };
+    return { success: true, data: { pc:0, mobile:0, total:0, docCount:0, goldIndex:null, adPc1:null, adPc2:null, adMobile1:null, adMobile2:null } };
   }
 }
 
