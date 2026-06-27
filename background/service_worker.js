@@ -72,27 +72,26 @@ async function analyzeKeyword({ keyword, naverCustomerId, naverAccessLicense, na
 async function getAdData(keyword, customerId, license, secret) {
   const method = 'GET';
   const path   = '/keywordstool';
-
-  // ✅ 타임스탬프: 밀리초 단위
   const timestamp = String(Date.now());
-
   const sig = await makeSignature(timestamp, method, path, secret);
   const params = new URLSearchParams({ hintKeywords: keyword, showDetail: '1' });
 
   const res = await fetch(`https://manage.searchad.naver.com${path}?${params}`, {
     method,
     headers: {
-      'Content-Type': 'application/json; charset=UTF-8',
-      'X-Timestamp':  timestamp,
-      'X-API-KEY':    license,
-      'X-Customer':   String(customerId),
-      'X-Signature':  sig
+      'Content-Type':  'application/json',
+      'X-Timestamp':   timestamp,
+      'X-API-KEY':     license,
+      'X-Customer':    String(customerId),
+      'X-Signature':   sig,
+      'Accept':        'application/json',
+      'Cache-Control': 'no-cache'
     }
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`광고 API ${res.status}: ${body.slice(0, 150)}`);
+    throw new Error(`광고 API ${res.status}: ${body.slice(0, 200)}`);
   }
 
   const data = await res.json();
