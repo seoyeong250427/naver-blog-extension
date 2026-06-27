@@ -427,13 +427,20 @@
 
       <div class="settings-card">
         <div class="settings-card-title">⚡ 네이버 광고 API</div>
-        <div class="settings-field"><label>Customer ID</label><input class="form-input" id="sNaverCid" placeholder="naver-xxx-xxx"></div>
+        <div class="settings-field"><label>Customer ID</label><input class="form-input" id="sNaverCid" placeholder="예: 4420732"></div>
         <div class="settings-field"><label>Access License</label><input class="form-input" id="sNaverLic" placeholder="Access License"></div>
         <div class="settings-field"><label>Secret Key</label><input class="form-input" type="password" id="sNaverSecret" placeholder="Secret Key"></div>
         <div class="settings-actions">
           <button class="btn btn-analyze" id="testNaverBtn">🔗 연결 테스트</button>
           <span id="naverTestResult"></span>
         </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">🔍 네이버 검색 API</div>
+        <div class="settings-field"><label>Client ID</label><input class="form-input" id="sNaverClientId" placeholder="네이버 검색 API Client ID"></div>
+        <div class="settings-field"><label>Client Secret</label><input class="form-input" type="password" id="sNaverClientSecret" placeholder="네이버 검색 API Client Secret"></div>
+        <p style="font-size:11px;color:#9ca3af;margin-top:4px;">💡 블로그 문서수를 더 정확하게 가져옵니다.<br>없으면 기본 방식으로 동작합니다.</p>
       </div>
 
       <div class="settings-card">
@@ -462,20 +469,6 @@
           <input class="form-input" type="number" id="sAutoInterval" value="0" min="0" placeholder="0=비활성">
         </div>
         <p style="font-size:11px;color:#9ca3af;margin-top:6px;">💡 오전 6시경 새 트렌드 키워드가 생성됩니다.<br>자동수집을 켜두면 자동으로 수집 후 알림을 드립니다.</p>
-      </div>
-
-      <div class="settings-card">
-        <div class="settings-card-title">🔍 네이버 검색 API</div>
-        <div class="settings-field"><label>Client ID</label><input class="form-input" id="sNaverClientId" placeholder="네이버 검색 API Client ID"></div>
-        <div class="settings-field"><label>Client Secret</label><input class="form-input" type="password" id="sNaverClientSecret" placeholder="네이버 검색 API Client Secret"></div>
-        <p style="font-size:11px;color:#9ca3af;margin-top:4px;">💡 블로그 문서수를 더 정확하게 가져옵니다.<br>없으면 기본 방식으로 동작합니다.</p>
-      </div>
-
-      <div class="settings-card">
-        <div class="settings-card-title">🔍 네이버 검색 API</div>
-        <div class="settings-field"><label>Client ID</label><input class="form-input" id="sNaverClientId" placeholder="네이버 검색 API Client ID"></div>
-        <div class="settings-field"><label>Client Secret</label><input class="form-input" type="password" id="sNaverClientSecret" placeholder="네이버 검색 API Client Secret"></div>
-        <p style="font-size:11px;color:#9ca3af;margin-top:4px;">💡 블로그 문서수를 더 정확하게 가져옵니다.<br>없으면 기본 방식으로 동작합니다.</p>
       </div>
 
       <div class="settings-card">
