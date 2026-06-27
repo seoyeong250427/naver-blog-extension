@@ -44,167 +44,82 @@ async function collectNaverTrends(options) {
 
 async function getTrendKeywordsFromDataLab(clientId, clientSecret, options) {
   const { newOnly = true, maxRank = 20 } = options;
-  
-  // 네이버 32개 카테고리 매핑
-  const categories = [
-    { id: '100', name: '비지니스/경제' }, { id: '101', name: '맛집' },
-    { id: '102', name: '세계여행' }, { id: '103', name: '패션/미용' },
-    { id: '104', name: '상품리뷰' }, { id: '105', name: '육아/결혼' },
-    { id: '106', name: '일상/생각' }, { id: '107', name: '국내여행' },
-    { id: '108', name: '건강/의학' }, { id: '109', name: '요리/레시피' },
-    { id: '110', name: '교육/학문' }, { id: '111', name: 'IT/컴퓨터' },
-    { id: '112', name: '인테리어/DIY' }, { id: '113', name: '자동차' },
-    { id: '114', name: '스타/연예인' }, { id: '115', name: '방송' },
-    { id: '116', name: '취미' }, { id: '117', name: '스포츠' },
-    { id: '118', name: '게임' }, { id: '119', name: '사회/정치' },
-    { id: '120', name: '영화' }, { id: '121', name: '드라마' },
-    { id: '122', name: '여학/외국어' }, { id: '123', name: '문학/책' },
-    { id: '124', name: '반려동물' }, { id: '125', name: '음악' },
-    { id: '126', name: '공연/전시' }, { id: '127', name: '쫄은글/이미지' },
-    { id: '128', name: '원예/재배' }, { id: '129', name: '사진' },
-    { id: '130', name: '만화/애니' }, { id: '131', name: '미술/디자인' }
-  ];
-
   const results = [];
   const seen = new Set();
 
-  for (const cat of categories) {
-    try {
-      // 네이버 트렌드 카테고리별 키워드 API
-      const url = `https://trends.naver.com/trends/keywordsChartList.naver?period=DAILY&categoryId=${cat.id}`;
-      const res = await fetch(url, {
-        headers: {
-          'X-Naver-Client-Id': clientId,
-          'X-Naver-Client-Secret': clientSecret,
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!res.ok) continue;
-      
-      const data = await res.json();
-      const items = data.keywordList || [];
-
-      for (const item of items.slice(0, maxRank)) {
-        const kw = item.keyword;
-        const isNew = item.isNew || false;
-        
-        if (!kw || seen.has(kw)) continue;
-        if (newOnly && !isNew) continue;
-        
-        seen.add(kw);
-        results.push({
-          keyword: kw,
-          isNew,
-          rank: item.rank || results.length + 1,
-          category: cat.name,
-          collectedAt: Date.now()
-        });
+  // 네이버 실시간 급상승 검색어 (공개 API)
+  const url = 'https://openapi.naver.com/v1/search/trend.json';
+  
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret
       }
-    } catch(e) {
-      continue;
-    }
+    });
 
-    await new Promise(r => setTimeout(r, 100));
+    if (res.ok) {
+      const data = await res.json();
+      const items = data.results || [];
+      for (let i = 0; i < Math.min(items.length, maxRank); i++) {
+        const kw = items[i].keyword || items[i].title || items[i].name;
+        if (kw && !seen.has(kw)) {
+          seen.add(kw);
+          results.push({
+            keyword: kw,
+            isNew: true,
+            rank: i + 1,
+            category: '트렌드',
+            collectedAt: Date.now()
+          });
+        }
+      }
+    }
+  } catch(e) {
+    console.warn('트렌드 API 실패:', e.message);
+  }
+
+  // 부족하면 네이버 뉴스 검색으로 보완
+  if (results.length < 10) {
+    const newsKeywords = ['오늘', '최신', '뉴스', '이슈', '화제'];
+    for (const kw of newsKeywords) {
+      try {
+        const res = await fetch(
+          `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(kw)}&display=10&sort=date`,
+          {
+            headers: {
+              'X-Naver-Client-Id': clientId,
+              'X-Naver-Client-Secret': clientSecret
+            }
+          }
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const item of (data.items || [])) {
+          // 제목에서 키워드 추출
+          const title = item.title.replace(/<[^>]+>/g, '').trim();
+          const words = title.split(/\s+/).filter(w => w.length >= 2 && w.length <= 10);
+          for (const word of words.slice(0, 3)) {
+            if (!seen.has(word) && results.length < maxRank) {
+              seen.add(word);
+              results.push({
+                keyword: word,
+                isNew: true,
+                rank: results.length + 1,
+                category: '뉴스',
+                collectedAt: Date.now()
+              });
+            }
+          }
+        }
+      } catch(e) { continue; }
+    }
   }
 
   return results;
 }
 
 
-// 네이버 검색 API로 트렌드 키워드 수집
-async function getTrendKeywordsFromAPI(clientId, clientSecret, options) {
-  const categories = [
-    'ALL', 'SOCIETY', 'LIFE', 'WORLD', 'CULTURE',
-    'TRAVEL', 'FOOD', 'SPORTS', 'ENTERTAINMENT'
-  ];
-
-  const keywords = [];
-  const seen = new Set();
-
-  for (const category of categories) {
-    try {
-      const res = await fetch(
-        `https://openapi.naver.com/v1/search/trend.json?category=${category}&timeUnit=date`,
-        {
-          headers: {
-            'X-Naver-Client-Id': clientId,
-            'X-Naver-Client-Secret': clientSecret
-          }
-        }
-      );
-
-      if (!res.ok) continue;
-      const data = await res.json();
-      
-      if (data.results) {
-        for (const item of data.results) {
-          const kw = item.keyword || item.title;
-          if (kw && !seen.has(kw)) {
-            seen.add(kw);
-            keywords.push({
-              keyword: kw,
-              isNew: true,
-              rank: keywords.length + 1,
-              category: category,
-              collectedAt: Date.now()
-            });
-          }
-        }
-      }
-    } catch(e) { continue; }
-  }
-
-  return keywords;
-}
-
-function waitTabLoad(tabId, timeout) {
-      return new Promise((res, rej) => {
-              const t = setTimeout(() => rej(new Error('탭 로드 시간 초과')), timeout);
-              chrome.tabs.onUpdated.addListener(function fn(id, info) {
-                        if (id === tabId && info.status === 'complete') {
-                                    clearTimeout(t);
-                                    chrome.tabs.onUpdated.removeListener(fn);
-                                    setTimeout(res, 1500);
-                        }
-              });
-      });
-}
-
-// ── 네이버 광고 API 연결 테스트 ──────────────────────────────────────
-async function testNaverApi({ customerId, accessLicense, secretKey }) {
-      try {
-              await getAdData('테스트', customerId, accessLicense, secretKey);
-              return { success: true, message: '광고 API 연결 성공!' };
-      } catch(e) {
-              return { success: false, error: e.message };
-      }
-}
-
-// ── 네이버 검색 API 연결 테스트 ──────────────────────────────────────
-async function testNaverSearch({ clientId, clientSecret }) {
-      try {
-              const res = await fetch(
-                        'https://openapi.naver.com/v1/search/blog.json?query=테스트&display=1',
-                  {
-                              headers: {
-                                            'X-Naver-Client-Id': clientId,
-                                            'X-Naver-Client-Secret': clientSecret
-                              }
-                  }
-                      );
-              if (!res.ok) {
-                        const body = await res.text().catch(() => '');
-                        return { success: false, error: `검색 API ${res.status}: ${body.slice(0, 200)}` };
-              }
-              const data = await res.json();
-              return { success: true, message: `검색 API 연결 성공! (총 ${data.total}건)` };
-      } catch(e) {
-              return { success: false, error: e.message };
-      }
-}
-
-// ── 키워드 분석 - 데이터랩 API 사용 ────────────────────────────────
 async function analyzeKeyword({ keyword, naverClientId, naverClientSecret }) {
   try {
     // 1) 데이터랩 API로 검색 트렌드 조회
