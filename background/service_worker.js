@@ -42,81 +42,65 @@ async function collectNaverTrends(options) {
 }
 
 async function collectTrendKeywords(clientId, clientSecret, options) {
-  const { maxRank = 20 } = options;
+  const { newOnly = true, maxRank = 20 } = options;
+
+  // 네이버 트렌드 32개 카테고리
+  const categories = [
+    { id: '100', name: '비즈니스/경제' }, { id: '101', name: '맛집' },
+    { id: '102', name: '세계여행' },      { id: '103', name: '패션/미용' },
+    { id: '104', name: '상품리뷰' },      { id: '105', name: '육아/결혼' },
+    { id: '106', name: '일상/생각' },     { id: '107', name: '국내여행' },
+    { id: '108', name: '건강/의학' },     { id: '109', name: '요리/레시피' },
+    { id: '110', name: '교육/학문' },     { id: '111', name: 'IT/컴퓨터' },
+    { id: '112', name: '인테리어/DIY' },  { id: '113', name: '자동차' },
+    { id: '114', name: '스타/연예인' },   { id: '115', name: '방송' },
+    { id: '116', name: '취미' },          { id: '117', name: '스포츠' },
+    { id: '118', name: '게임' },          { id: '119', name: '사회/정치' },
+    { id: '120', name: '영화' },          { id: '121', name: '드라마' },
+    { id: '122', name: '여학/외국어' },   { id: '123', name: '문학/책' },
+    { id: '124', name: '반려동물' },      { id: '125', name: '음악' },
+    { id: '126', name: '공연/전시' },     { id: '127', name: '쫄은글/이미지' },
+    { id: '128', name: '원예/재배' },     { id: '129', name: '사진' },
+    { id: '130', name: '만화/애니' },     { id: '131', name: '미술/디자인' }
+  ];
+
   const results = [];
   const seen = new Set();
 
-  // 네이버 뉴스 검색으로 트렌드 키워드 수집
-  const queries = ['오늘 뉴스', '실시간 이슈', '화제', '최신 트렌드'];
-
-  for (const q of queries) {
+  for (const cat of categories) {
     try {
-      const res = await fetch(
-        `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(q)}&display=20&sort=date`,
-        {
-          headers: {
-            'X-Naver-Client-Id': clientId,
-            'X-Naver-Client-Secret': clientSecret
-          }
-        }
-      );
+      const url = `https://trends.naver.com/trends/keywordsChartList.naver?period=DAILY&categoryId=${cat.id}`;
+      const res = await fetch(url, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json, text/plain, */*' }
+      });
 
       if (!res.ok) continue;
-      const data = await res.json();
 
-      for (const item of (data.items || [])) {
-        const title = item.title.replace(/<[^>]+>/g, '').trim();
-        // 2~8글자 키워드 추출
-        const words = title.split(/[\s,·]+/).filter(w => w.length >= 2 && w.length <= 8 && /[가-힣]/.test(w));
-        for (const word of words.slice(0, 2)) {
-          if (!seen.has(word) && results.length < maxRank * 2) {
-            seen.add(word);
-            results.push({
-              keyword: word,
-              isNew: true,
-              rank: results.length + 1,
-              category: '뉴스트렌드',
-              collectedAt: Date.now()
-            });
-          }
-        }
+      const data = await res.json();
+      const items = data.keywordList || [];
+
+      for (const item of items) {
+        if (item.rank > maxRank) continue;
+        if (newOnly && !item.isNew) continue;
+        if (!item.keyword || seen.has(item.keyword)) continue;
+
+        seen.add(item.keyword);
+        results.push({
+          keyword: item.keyword,
+          isNew: item.isNew || false,
+          rank: item.rank || results.length + 1,
+          riseRank: item.rankingChange || 0,
+          category: cat.name,
+          collectedAt: Date.now()
+        });
       }
     } catch(e) { continue; }
+
+    await new Promise(r => setTimeout(r, 150));
   }
 
-  // 블로그 검색으로 추가 수집
-  try {
-    const res = await fetch(
-      `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent('오늘')}&display=20&sort=date`,
-      {
-        headers: {
-          'X-Naver-Client-Id': clientId,
-          'X-Naver-Client-Secret': clientSecret
-        }
-      }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      for (const item of (data.items || [])) {
-        const title = item.title.replace(/<[^>]+>/g, '').trim();
-        const words = title.split(/[\s,·]+/).filter(w => w.length >= 2 && w.length <= 8 && /[가-힣]/.test(w));
-        for (const word of words.slice(0, 2)) {
-          if (!seen.has(word) && results.length < maxRank * 3) {
-            seen.add(word);
-            results.push({
-              keyword: word,
-              isNew: true,
-              rank: results.length + 1,
-              category: '블로그트렌드',
-              collectedAt: Date.now()
-            });
-          }
-        }
-      }
-    }
-  } catch(e) {}
-
-  return results.slice(0, maxRank);
+  return results;
 }
 
 // ── 키워드 분석 ──────────────────────────────────────────────────────
