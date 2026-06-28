@@ -736,6 +736,18 @@ async function publishToNaver() {
 function initSettingsTab() {
   document.getElementById('saveSettingsBtn').addEventListener('click', saveSettingsUI);
   document.getElementById('testNaverBtn').addEventListener('click', testNaverApi);
+  document.getElementById('naverLoginBtn').addEventListener('click', async () => {
+    const el = document.getElementById('naverLoginStatus');
+    el.textContent = '로그인 창을 열고 있습니다...';
+    const res = await window.electronAPI.naverLogin();
+    if (res.success) {
+      el.textContent = '✅ 로그인 완료. 이제 트렌드 키워드 수집이 가능합니다.';
+      el.style.color = '#16a34a';
+    } else {
+      el.textContent = '❌ ' + (res.error || '로그인 실패');
+      el.style.color = '#dc2626';
+    }
+  });
   document.getElementById('addAccountBtn').addEventListener('click', addAccount);
 }
 

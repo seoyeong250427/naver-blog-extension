@@ -98,58 +98,48 @@ ipcMain.handle('collect-trends', async () => {
           return;
         }
 
-        // 키워드 추출
+        // 크리에이터 어드바이저 내부 API 직접 호출
         const data = await crawler.webContents.executeJavaScript(`
           (function() {
-            const results = [];
-            const seen = new Set();
+            return new Promise(async (resolve) => {
+              try {
+                // 페이지 내 Vue/React 상태에서 데이터 추출 시도
+                const results = [];
+                const seen = new Set();
 
-            // 카테고리별 키워드 목록 추출
-            // 여러 셀렉터 시도
-            const keywordSelectors = [
-              '.keyword_item .keyword_text',
-              '.trend_keyword .keyword',
-              '.item_keyword',
-              'li.keyword_item',
-              '.keyword_list li',
-              '.trend_list .item',
-              '[class*="keyword"] [class*="text"]',
-              '[class*="KeywordItem"]',
-              '[class*="keyword-item"]',
-            ];
+                // 실제 DOM에서 키워드 추출
+                // 카테고리 섹션들 찾기
+                const sections = document.querySelectorAll('[class*="category"], [class*="Category"], section, article');
+                
+                sections.forEach(section => {
+                  const titleEl = section.querySelector('h1,h2,h3,h4,[class*="title"],[class*="name"],[class*="Title"]');
+                  const category = titleEl ? titleEl.textContent.trim() : '';
+                  
+                  const keywords = section.querySelectorAll('li, [class*="keyword"], [class*="item"], [class*="rank"]');
+                  keywords.forEach((el, i) => {
+                    const text = el.textContent.trim().replace(/[0-9▲▼↑↓\n\r\t]+/g, '').trim();
+                    if (text.length >= 2 && text.length <= 20 && !seen.has(text) && category) {
+                      seen.add(text);
+                      results.push({ keyword: text, category, rank: i + 1 });
+                    }
+                  });
+                });
 
-            // 카테고리 셀렉터
-            const catSelectors = [
-              '.category_name',
-              '[class*="category"] [class*="name"]',
-              '.tab_name',
-              '[class*="Category"]',
-            ];
-
-            // 페이지 전체 텍스트에서 추출 시도
-            const allItems = document.querySelectorAll('li, .item, [class*="rank"], [class*="keyword"]');
-            
-            allItems.forEach(el => {
-              const text = el.textContent.trim();
-              if (text.length > 1 && text.length < 20 && !seen.has(text)) {
-                // 숫자나 특수문자로만 이루어진 것 제외
-                if (!/^[0-9\\s▲▼-]+$/.test(text)) {
-                  seen.add(text);
-                  // 부모에서 카테고리 찾기
-                  const section = el.closest('section, article, div[class*="category"], div[class*="Category"]');
-                  const catEl = section ? section.querySelector('h2, h3, h4, [class*="title"], [class*="name"]') : null;
-                  const category = catEl ? catEl.textContent.trim() : '트렌드';
-                  results.push({ keyword: text, category });
+                // DOM에서 못 찾으면 페이지 텍스트 파싱
+                if (results.length === 0) {
+                  resolve({
+                    results: [],
+                    bodyText: document.body.innerText.slice(0, 5000),
+                    html: document.body.innerHTML.slice(0, 5000)
+                  });
+                  return;
                 }
+
+                resolve({ results, bodyText: '', html: '' });
+              } catch(e) {
+                resolve({ results: [], error: e.message, bodyText: document.body.innerText.slice(0, 3000) });
               }
             });
-
-            return {
-              results: results.slice(0, 200),
-              url: location.href,
-              title: document.title,
-              bodyText: document.body.innerText.slice(0, 3000)
-            };
           })()
         `);
 
