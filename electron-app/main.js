@@ -1,12 +1,12 @@
-// Electron 메인 프로세스 - 창 생성 및 IPC 핸들러
+// Electron 메인 프로세스
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const NaverAd = require('./api/naver-ad');
 
 let mainWindow;
+let naverSession; // 네이버 로그인 세션용 파티션
 
-// 데이터 파일 경로
 function getDataPath() {
   return path.join(app.getPath('userData'), 'appdata.json');
 }
@@ -25,7 +25,6 @@ function createWindow() {
     },
     title: '황금키워드 도구',
   });
-
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'main.html'));
   mainWindow.setMenuBarVisibility(false);
 }
@@ -33,136 +32,159 @@ function createWindow() {
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-// ── IPC: 네이버 트렌드 크롤링 (내장 브라우저 사용) ──────────────────
-ipcMain.handle('collect-trends', async (_event, { clientId, clientSecret } = {}) => {
+// ── 네이버 로그인 창 띄우기 ──────────────────────────────────────
+ipcMain.handle('naver-login', async () => {
   return new Promise((resolve) => {
-    // 숨겨진 크롤링용 창 생성
-    const crawler = new BrowserWindow({
-      width: 1200,
-      height: 800,
-      show: false, // 숨김
+    const loginWin = new BrowserWindow({
+      width: 500,
+      height: 600,
+      title: '네이버 로그인',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        partition: 'persist:naver', // 네이버 로그인 세션 유지
+        partition: 'persist:naver',
       },
     });
 
-    const results = [];
-    const seen = new Set();
-    let processed = 0;
+    loginWin.loadURL('https://nid.naver.com/nidlogin.login');
 
-    // 네이버 데이터랩 카테고리별 트렌드 페이지
-    const DATALAB_CATEGORIES = [
-      { id: 'home',          name: '생활' },
-      { id: 'food',          name: '음식' },
-      { id: 'sports',        name: '스포츠' },
-      { id: 'beauty',        name: '미용' },
-      { id: 'health',        name: '건강' },
-      { id: 'travel',        name: '여행' },
-      { id: 'entertainment', name: '연예' },
-      { id: 'game',          name: '게임' },
-      { id: 'pet',           name: '반려동물' },
-      { id: 'politics',      name: '정치사회' },
-      { id: 'it',            name: 'IT' },
-      { id: 'economy',       name: '경제' },
-      { id: 'culture',       name: '문화' },
-      { id: 'fashion',       name: '패션' },
-      { id: 'parenting',     name: '육아' },
-      { id: 'education',     name: '교육' },
-    ];
-
-    let catIndex = 0;
-
-    async function crawlNext() {
-      if (catIndex >= DATALAB_CATEGORIES.length) {
-        crawler.destroy();
-        console.log(`크롤링 완료: ${results.length}개`);
-        resolve({ success: true, data: results });
-        return;
-      }
-
-      const cat = DATALAB_CATEGORIES[catIndex++];
-      const url = `https://datalab.naver.com/keyword/trendSearch.naver?categoryId=${cat.id}`;
-
-      try {
-        await crawler.loadURL(url);
-
-        // 페이지 로딩 대기
-        await new Promise(r => setTimeout(r, 2000));
-
-        // 키워드 추출
-        const keywords = await crawler.webContents.executeJavaScript(`
-          (function() {
-            const items = [];
-            // 데이터랩 트렌드 키워드 셀렉터
-            const selectors = [
-              '.keyword_list .item .keyword',
-              '.trend_keyword_list li .keyword',
-              '.list_keyword li',
-              'li.item span.keyword',
-              '.keyword_rank_list li',
-            ];
-            for (const sel of selectors) {
-              const els = document.querySelectorAll(sel);
-              if (els.length > 0) {
-                els.forEach(el => {
-                  const text = el.textContent.trim();
-                  if (text && text.length > 1 && text.length < 30) items.push(text);
-                });
-                break;
-              }
-            }
-            // 못 찾으면 페이지 텍스트에서 추출 시도
-            if (items.length === 0) {
-              const allText = document.body.innerText;
-              return { items, html: document.body.innerHTML.slice(0, 2000) };
-            }
-            return { items, html: '' };
-          })()
-        `);
-
-        if (keywords.items.length > 0) {
-          keywords.items.slice(0, 10).forEach((kw, i) => {
-            if (seen.has(kw)) return;
-            seen.add(kw);
-            results.push({
-              keyword: kw,
-              rank: i + 1,
-              category: cat.name,
-              isNew: false,
-              collectedAt: Date.now(),
-            });
-          });
-          console.log(`${cat.name}: ${keywords.items.length}개 수집`);
-        } else {
-          console.log(`${cat.name}: 키워드 없음`, keywords.html.slice(0, 200));
-        }
-      } catch (err) {
-        console.error(`${cat.name} 크롤링 오류:`, err.message);
-      }
-
-      // 다음 카테고리
-      setTimeout(crawlNext, 500);
-    }
-
-    crawler.on('closed', () => {
-      if (results.length === 0) {
-        resolve({ success: false, error: '크롤링 실패' });
+    // 로그인 완료 감지 - 네이버 메인으로 이동하면 완료
+    loginWin.webContents.on('did-navigate', (e, url) => {
+      if (url.includes('naver.com') && !url.includes('nidlogin')) {
+        loginWin.destroy();
+        resolve({ success: true });
       }
     });
 
-    crawlNext();
-
-    // 2분 타임아웃
-    setTimeout(() => {
-      if (!crawler.isDestroyed()) crawler.destroy();
-      resolve({ success: true, data: results });
-    }, 120000);
+    loginWin.on('closed', () => resolve({ success: false, error: '창을 닫았습니다.' }));
   });
 });
 
-// ── IPC: 네이버 광고 API 키워드 분석 ──────────────────────────────
+// ── 크리에이터 어드바이저 크롤링 ─────────────────────────────────
+ipcMain.handle('collect-trends', async () => {
+  return new Promise((resolve) => {
+    const crawler = new BrowserWindow({
+      width: 1200,
+      height: 900,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        partition: 'persist:naver', // 로그인 세션 재사용
+      },
+    });
+
+    const TARGET_URL = 'https://creator-advisor.naver.com/naver_blog/foodlover1109/trends';
+
+    crawler.loadURL(TARGET_URL);
+
+    // 타임아웃 30초
+    const timeout = setTimeout(() => {
+      if (!crawler.isDestroyed()) crawler.destroy();
+      resolve({ success: false, error: '크롤링 타임아웃' });
+    }, 30000);
+
+    crawler.webContents.on('did-finish-load', async () => {
+      try {
+        // 페이지 완전 렌더링 대기
+        await new Promise(r => setTimeout(r, 3000));
+
+        // 현재 URL 확인 - 로그인 페이지로 리다이렉트됐는지 체크
+        const currentUrl = crawler.webContents.getURL();
+        if (currentUrl.includes('nidlogin')) {
+          clearTimeout(timeout);
+          crawler.destroy();
+          resolve({ success: false, error: 'LOGIN_REQUIRED' });
+          return;
+        }
+
+        // 키워드 추출
+        const data = await crawler.webContents.executeJavaScript(`
+          (function() {
+            const results = [];
+            const seen = new Set();
+
+            // 카테고리별 키워드 목록 추출
+            // 여러 셀렉터 시도
+            const keywordSelectors = [
+              '.keyword_item .keyword_text',
+              '.trend_keyword .keyword',
+              '.item_keyword',
+              'li.keyword_item',
+              '.keyword_list li',
+              '.trend_list .item',
+              '[class*="keyword"] [class*="text"]',
+              '[class*="KeywordItem"]',
+              '[class*="keyword-item"]',
+            ];
+
+            // 카테고리 셀렉터
+            const catSelectors = [
+              '.category_name',
+              '[class*="category"] [class*="name"]',
+              '.tab_name',
+              '[class*="Category"]',
+            ];
+
+            // 페이지 전체 텍스트에서 추출 시도
+            const allItems = document.querySelectorAll('li, .item, [class*="rank"], [class*="keyword"]');
+            
+            allItems.forEach(el => {
+              const text = el.textContent.trim();
+              if (text.length > 1 && text.length < 20 && !seen.has(text)) {
+                // 숫자나 특수문자로만 이루어진 것 제외
+                if (!/^[0-9\\s▲▼-]+$/.test(text)) {
+                  seen.add(text);
+                  // 부모에서 카테고리 찾기
+                  const section = el.closest('section, article, div[class*="category"], div[class*="Category"]');
+                  const catEl = section ? section.querySelector('h2, h3, h4, [class*="title"], [class*="name"]') : null;
+                  const category = catEl ? catEl.textContent.trim() : '트렌드';
+                  results.push({ keyword: text, category });
+                }
+              }
+            });
+
+            return {
+              results: results.slice(0, 200),
+              url: location.href,
+              title: document.title,
+              bodyText: document.body.innerText.slice(0, 3000)
+            };
+          })()
+        `);
+
+        clearTimeout(timeout);
+        crawler.destroy();
+
+        if (data.results.length > 0) {
+          const keywords = data.results.map((item, i) => ({
+            keyword: item.keyword,
+            rank: i + 1,
+            category: item.category,
+            isNew: false,
+            collectedAt: Date.now(),
+          }));
+          resolve({ success: true, data: keywords });
+        } else {
+          // 키워드 못 찾으면 페이지 텍스트 디버그용으로 전달
+          console.log('페이지 텍스트:', data.bodyText);
+          resolve({ success: false, error: 'NO_DATA', debug: data.bodyText });
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        if (!crawler.isDestroyed()) crawler.destroy();
+        resolve({ success: false, error: err.message });
+      }
+    });
+
+    crawler.on('closed', () => {
+      clearTimeout(timeout);
+      resolve({ success: false, error: '창이 닫혔습니다.' });
+    });
+  });
+});
+
+// ── IPC: 광고 API 키워드 분석 ────────────────────────────────────
 ipcMain.handle('analyze-keywords', async (_event, { keywords, customerId, apiKey, secretKey }) => {
   try {
     const result = await NaverAd.getKeywordStats(keywords, customerId, apiKey, secretKey);
@@ -172,19 +194,17 @@ ipcMain.handle('analyze-keywords', async (_event, { keywords, customerId, apiKey
   }
 });
 
-// ── IPC: 외부 링크 열기 ───────────────────────────────────────────
+// ── IPC: 외부 링크 열기 ──────────────────────────────────────────
 ipcMain.handle('open-external', async (_event, url) => {
   await shell.openExternal(url);
 });
 
-// ── IPC: 데이터 저장 ──────────────────────────────────────────────
+// ── IPC: 데이터 저장 ─────────────────────────────────────────────
 ipcMain.handle('save-data', async (_event, data) => {
   try {
     const filePath = getDataPath();
     let existing = {};
-    if (fs.existsSync(filePath)) {
-      existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    }
+    if (fs.existsSync(filePath)) existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     fs.writeFileSync(filePath, JSON.stringify({ ...existing, ...data }, null, 2), 'utf-8');
     return { success: true };
   } catch (err) {
@@ -192,13 +212,11 @@ ipcMain.handle('save-data', async (_event, data) => {
   }
 });
 
-// ── IPC: 데이터 로드 ──────────────────────────────────────────────
+// ── IPC: 데이터 로드 ─────────────────────────────────────────────
 ipcMain.handle('load-data', async () => {
   try {
     const filePath = getDataPath();
     if (!fs.existsSync(filePath)) return {};
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch {
-    return {};
-  }
+  } catch { return {}; }
 });

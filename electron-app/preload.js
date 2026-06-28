@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   saveData: (data) => ipcRenderer.invoke('save-data', data),
   loadData: () => ipcRenderer.invoke('load-data'),
+  naverLogin: () => ipcRenderer.invoke('naver-login'),
 });

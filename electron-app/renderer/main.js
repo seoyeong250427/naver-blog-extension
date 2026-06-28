@@ -372,6 +372,12 @@ async function collectTrends() {
       renderTable();
       updateHeader();
       setStatus(`✅ ${keywords.length}개 수집 완료 (신규 ${newCount}개).`);
+    } else if (res.error === 'LOGIN_REQUIRED') {
+      setStatus('⚠️ 네이버 로그인이 필요합니다. 로그인 후 다시 수집하세요.');
+      const loginRes = await window.electronAPI.naverLogin();
+      if (loginRes.success) {
+        setStatus('✅ 로그인 완료. 수집 버튼을 다시 눌러주세요.');
+      }
     } else {
       setStatus('⚠️ ' + (res.error || '키워드를 가져오지 못했습니다.'));
     }
