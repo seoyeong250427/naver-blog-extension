@@ -757,6 +757,8 @@ function loadSettingsUI() {
     const key = { sNaverCid:'naverCustomerId', sNaverLic:'naverAccessLicense', sNaverSecret:'naverSecretKey', sNaverClientId:'naverClientId', sNaverClientSecret:'naverClientSecret', sClaudeKey:'claudeApiKey', sOpenaiKey:'openaiApiKey', sAutoTime:'sAutoTime', sAutoInterval:'sAutoInterval', sMaxRank:'sMaxRank', sMinRise:'sMinRise' }[id];
     if (s[key] != null) document.getElementById(id).value = s[key];
   });
+  if (document.getElementById('sNaverCookie')) document.getElementById('sNaverCookie').value = s.naverCookie || '';
+  if (document.getElementById('sAdvisorUrl')) document.getElementById('sAdvisorUrl').value = s.advisorUrl || 'https://creator-advisor.naver.com/naver_blog/foodlover1109/trends';
   renderAccountList();
 }
 
@@ -773,7 +775,9 @@ function saveSettingsUI() {
     sAutoTime:          document.getElementById('sAutoTime').value,
     sAutoInterval:      parseInt(document.getElementById('sAutoInterval').value)||0,
     sMaxRank:           parseInt(document.getElementById('sMaxRank').value)||20,
-    sMinRise:           parseInt(document.getElementById('sMinRise').value)||0
+    sMinRise:           parseInt(document.getElementById('sMinRise').value)||0,
+    naverCookie:        document.getElementById('sNaverCookie') ? document.getElementById('sNaverCookie').value.trim() : '',
+    advisorUrl:         document.getElementById('sAdvisorUrl') ? document.getElementById('sAdvisorUrl').value.trim() : 'https://creator-advisor.naver.com/naver_blog/foodlover1109/trends'
   };
   persist(['settings', 'accounts']);
   updateAnalyzeBtn();
