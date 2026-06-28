@@ -1,8 +1,14 @@
 // Electron 메인 프로세스 - 창 생성 및 IPC 핸들러
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const NaverTrends = require('./api/naver-trends');
 const NaverAd = require('./api/naver-ad');
+
+// 데이터 파일 경로 - 앱 userData 폴더에 영구 저장
+function getDataPath() {
+  return path.join(app.getPath('userData'), 'appdata.json');
+}
 
 let mainWindow;
 
@@ -55,4 +61,31 @@ ipcMain.handle('analyze-keywords', async (_event, { keywords, customerId, apiKey
 // ── IPC 핸들러: 외부 링크 열기 ──
 ipcMain.handle('open-external', async (_event, url) => {
   await shell.openExternal(url);
+});
+
+// ── IPC 핸들러: 데이터 저장 ──
+ipcMain.handle('save-data', async (_event, data) => {
+  try {
+    const filePath = getDataPath();
+    let existing = {};
+    if (fs.existsSync(filePath)) {
+      existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+    const merged = { ...existing, ...data };
+    fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf-8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// ── IPC 핸들러: 데이터 로드 ──
+ipcMain.handle('load-data', async () => {
+  try {
+    const filePath = getDataPath();
+    if (!fs.existsSync(filePath)) return {};
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  } catch (err) {
+    return {};
+  }
 });

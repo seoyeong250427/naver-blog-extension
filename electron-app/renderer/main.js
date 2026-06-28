@@ -204,20 +204,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadAll() {
-  const load = (key, fallback) => {
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
-  };
-  S.keywords          = load('keywords', []);
-  S.settings          = load('settings', {});
-  S.accounts          = load('accounts', []);
-  S.publishedKeywords = load('publishedKeywords', []);
-  S.writeHistory      = load('writeHistory', {});
+  try {
+    const data = await window.electronAPI.loadData();
+    S.keywords          = data.keywords          || [];
+    S.settings          = data.settings          || {};
+    S.accounts          = data.accounts          || [];
+    S.publishedKeywords = data.publishedKeywords || [];
+    S.writeHistory      = data.writeHistory      || {};
+  } catch(e) {
+    console.error('데이터 로드 실패:', e);
+  }
 }
 
 async function persist(keys) {
-  keys.forEach(k => {
-    try { localStorage.setItem(k, JSON.stringify(S[k])); } catch(e) { console.error('저장 실패:', k, e); }
-  });
+  const data = {};
+  keys.forEach(k => { data[k] = S[k]; });
+  try {
+    await window.electronAPI.saveData(data);
+  } catch(e) {
+    console.error('저장 실패:', e);
+  }
 }
 
 function updateHeader() {
@@ -764,14 +770,26 @@ async function testNaverApi() {
   const sec = document.getElementById('sNaverSecret').value.trim();
   const cid = document.getElementById('sNaverCid').value.trim();
   const el  = document.getElementById('naverTestResult');
+
+  if (!lic || !sec || !cid) {
+    el.textContent='❌ Customer ID, Access License, Secret Key를 모두 입력하세요.';
+    el.className='api-err';
+    return;
+  }
+
   el.textContent='테스트 중...'; el.className='';
   try {
     const r = await window.electronAPI.analyzeKeywords({
-      keywords: [{ keyword: '테스트', naverClientId: '', naverClientSecret: '' }],
+      keywords: [{ keyword: '다이어트', naverClientId: '', naverClientSecret: '' }],
       customerId: cid, apiKey: lic, secretKey: sec
     });
-    if (r.success) { el.textContent='✅ 연결 성공'; el.className='api-ok'; }
-    else           { el.textContent='❌ ' + r.error; el.className='api-err'; }
+    if (r.success && r.data && r.data.length > 0) {
+      el.textContent='✅ 연결 성공'; el.className='api-ok';
+    } else if (r.success) {
+      el.textContent='⚠️ 연결됐지만 데이터 없음. API 키를 확인하세요.'; el.className='api-err';
+    } else {
+      el.textContent='❌ ' + r.error; el.className='api-err';
+    }
   } catch(e) { el.textContent='❌ ' + e.message; el.className='api-err'; }
 }
 
