@@ -48,15 +48,36 @@ ipcMain.handle('naver-login', async () => {
 
     loginWin.loadURL('https://nid.naver.com/nidlogin.login');
 
-    // 로그인 완료 감지 - 네이버 메인으로 이동하면 완료
-    loginWin.webContents.on('did-navigate', (e, url) => {
-      if (url.includes('naver.com') && !url.includes('nidlogin')) {
-        loginWin.destroy();
-        resolve({ success: true });
-      }
-    });
+    let loggedIn = false;
 
-    loginWin.on('closed', () => resolve({ success: false, error: '창을 닫았습니다.' }));
+    // 로그인 완료 감지 - naver.com으로 이동하면 완료
+    const checkLogin = (url) => {
+      if (loggedIn) return;
+      // 로그인 성공 후 이동하는 URL 패턴들
+      const successPatterns = [
+        'www.naver.com',
+        'naver.com/index',
+        'creator-advisor',
+        'blog.naver.com',
+        'myaccount.naver.com',
+      ];
+      const isSuccess = successPatterns.some(p => url.includes(p));
+      if (isSuccess) {
+        loggedIn = true;
+        setTimeout(() => {
+          if (!loginWin.isDestroyed()) loginWin.destroy();
+          resolve({ success: true });
+        }, 1000);
+      }
+    };
+
+    loginWin.webContents.on('did-navigate', (e, url) => checkLogin(url));
+    loginWin.webContents.on('did-redirect-navigation', (e, url) => checkLogin(url));
+    loginWin.webContents.on('will-navigate', (e, url) => checkLogin(url));
+
+    loginWin.on('closed', () => {
+      if (!loggedIn) resolve({ success: false, error: '창을 닫았습니다.' });
+    });
   });
 });
 
