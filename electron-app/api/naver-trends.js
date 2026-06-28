@@ -1,7 +1,6 @@
-// 네이버 트렌드 키워드 수집 모듈 - 데이터랩 공식 API 사용
+// 네이버 트렌드 키워드 수집 모듈
 const axios = require('axios');
 
-// 날짜 헬퍼
 function getDateRange(days = 7) {
   const end = new Date();
   const start = new Date();
@@ -10,13 +9,12 @@ function getDateRange(days = 7) {
   return { startDate: fmt(start), endDate: fmt(end) };
 }
 
-// 네이버 데이터랩 검색어 트렌드 API - 고정 키워드 그룹으로 트렌드 수치 비교
+// 네이버 데이터랩 검색어트렌드 - 키워드 그룹별 트렌드 수치
 async function fetchDatalabTrends(clientId, clientSecret) {
   if (!clientId || !clientSecret) return [];
 
   const { startDate, endDate } = getDateRange(7);
 
-  // 인기 검색어 후보 목록 (트렌드 수치 비교용)
   const candidates = [
     ['다이어트','헬스','운동','요가','필라테스'],
     ['여행','제주도','해외여행','호텔','항공권'],
@@ -41,10 +39,7 @@ async function fetchDatalabTrends(clientId, clientSecret) {
           startDate,
           endDate,
           timeUnit: 'date',
-          keywordGroups: group.map((kw) => ({
-            groupName: kw,
-            keywords: [kw],
-          })),
+          keywordGroups: group.map((kw) => ({ groupName: kw, keywords: [kw] })),
         },
         {
           headers: {
@@ -57,13 +52,10 @@ async function fetchDatalabTrends(clientId, clientSecret) {
       );
 
       const items = res.data?.results || [];
-      // 트렌드 수치 기준으로 정렬
       const sorted = items
         .map((item) => {
           const data = item.data || [];
-          const avg = data.length
-            ? data.reduce((s, d) => s + (d.ratio || 0), 0) / data.length
-            : 0;
+          const avg = data.length ? data.reduce((s, d) => s + (d.ratio || 0), 0) / data.length : 0;
           return { keyword: item.title, ratio: avg };
         })
         .sort((a, b) => b.ratio - a.ratio);
@@ -83,14 +75,14 @@ async function fetchDatalabTrends(clientId, clientSecret) {
 
       await new Promise((r) => setTimeout(r, 100));
     } catch (err) {
-      console.error('데이터랩 트렌드 오류:', err.message);
+      console.error('데이터랩 오류:', err.response?.status, err.message);
     }
   }
 
   return results;
 }
 
-// 네이버 쇼핑인사이트 - 카테고리별 인기 키워드
+// 네이버 쇼핑인사이트 카테고리별 인기 키워드
 async function fetchShoppingTrends(clientId, clientSecret) {
   if (!clientId || !clientSecret) return [];
 
@@ -113,13 +105,14 @@ async function fetchShoppingTrends(clientId, clientSecret) {
 
   for (const cat of shopCats) {
     try {
+      // 쇼핑인사이트 분야별 트렌드 - 올바른 엔드포인트
       const res = await axios.post(
-        'https://openapi.naver.com/v1/datalab/shopping/category/keywords',
+        'https://openapi.naver.com/v1/datalab/shopping/categories',
         {
           startDate,
           endDate,
           timeUnit: 'date',
-          category: cat.id,
+          category: [{ name: cat.name, param: [cat.id] }],
           device: '',
           ages: [],
           gender: '',
@@ -134,24 +127,25 @@ async function fetchShoppingTrends(clientId, clientSecret) {
         }
       );
 
-      const keywords = res.data?.results?.[0]?.data || [];
-      keywords.slice(0, 10).forEach((item, i) => {
-        const kw = item.title || item.keyword || '';
-        if (!kw || seen.has(kw)) return;
-        seen.add(kw);
+      // 트렌드 수치가 높으면 해당 카테고리 키워드 추가
+      const data = res.data?.results?.[0]?.data || [];
+      const avg = data.length ? data.reduce((s, d) => s + (d.ratio || 0), 0) / data.length : 0;
+
+      if (avg > 0 && !seen.has(cat.name)) {
+        seen.add(cat.name);
         results.push({
-          keyword: kw,
-          rank: i + 1,
-          category: cat.name,
-          ratio: item.ratio || 0,
+          keyword: cat.name,
+          rank: results.length + 1,
+          category: '쇼핑트렌드',
+          ratio: Math.round(avg),
           isNew: false,
           collectedAt: Date.now(),
         });
-      });
+      }
 
       await new Promise((r) => setTimeout(r, 200));
     } catch (err) {
-      console.error(`쇼핑 카테고리 ${cat.name} 오류:`, err.message);
+      console.error(`쇼핑 ${cat.name} 오류:`, err.response?.status, err.message);
     }
   }
 
@@ -160,6 +154,11 @@ async function fetchShoppingTrends(clientId, clientSecret) {
 
 // 전체 수집 진입점
 async function collectAll({ clientId, clientSecret } = {}) {
+  if (!clientId || !clientSecret) {
+    console.error('네이버 검색 API 키가 없습니다.');
+    return [];
+  }
+
   const all = [];
   const seen = new Set();
 
@@ -171,16 +170,11 @@ async function collectAll({ clientId, clientSecret } = {}) {
     });
   };
 
-  if (clientId && clientSecret) {
-    // 1. 쇼핑인사이트 카테고리별 키워드
-    add(await fetchShoppingTrends(clientId, clientSecret));
-    // 2. 데이터랩 검색어 트렌드
-    add(await fetchDatalabTrends(clientId, clientSecret));
-  } else {
-    console.error('네이버 검색 API 키가 없습니다.');
-  }
+  add(await fetchDatalabTrends(clientId, clientSecret));
+  add(await fetchShoppingTrends(clientId, clientSecret));
 
+  console.log(`수집 완료: ${all.length}개`);
   return all;
 }
 
-module.exports = { collectAll, fetchShoppingTrends, fetchDatalabTrends };
+module.exports = { collectAll, fetchDatalabTrends, fetchShoppingTrends };
