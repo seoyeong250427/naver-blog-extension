@@ -1,4 +1,4 @@
-// 네이버 트렌드 키워드 수집 모듈 - 쇼핑인사이트 카테고리별 인기 키워드
+// 네이버 트렌드 키워드 수집 - 데이터랩 검색어트렌드 기반
 const axios = require('axios');
 
 function getDateRange(days = 7) {
@@ -9,150 +9,86 @@ function getDateRange(days = 7) {
   return { startDate: fmt(start), endDate: fmt(end) };
 }
 
-// 네이버 쇼핑인사이트 32개 카테고리 인기 키워드
-const SHOPPING_CATEGORIES = [
-  { id: '50000000', name: '패션의류' },
-  { id: '50000001', name: '패션잡화' },
-  { id: '50000002', name: '화장품미용' },
-  { id: '50000003', name: '디지털가전' },
-  { id: '50000004', name: '가구인테리어' },
-  { id: '50000005', name: '출산육아' },
-  { id: '50000006', name: '식품' },
-  { id: '50000007', name: '스포츠레저' },
-  { id: '50000008', name: '생활건강' },
-  { id: '50000009', name: '여행문화' },
-  { id: '50000010', name: '면세점' },
-  { id: '50000011', name: '도서' },
-  { id: '50000012', name: '자동차공구' },
-  { id: '50000013', name: '반려동물' },
-  { id: '50000014', name: '식물원예' },
-  { id: '50000015', name: '헬스의료' },
-  { id: '50000016', name: '음반DVD' },
-  { id: '50000017', name: '악기' },
-  { id: '50000018', name: '아트컬렉션' },
-  { id: '50000019', name: '문구오피스' },
-  { id: '50000020', name: '장난감취미' },
-  { id: '50000021', name: '게임' },
-  { id: '50000022', name: '주방용품' },
-  { id: '50000023', name: '청소세탁' },
-  { id: '50000024', name: '욕실용품' },
-  { id: '50000025', name: '침구커튼' },
-  { id: '50000026', name: '조명전기' },
-  { id: '50000027', name: '공구DIY' },
-  { id: '50000028', name: '여성의류' },
-  { id: '50000029', name: '남성의류' },
-  { id: '50000030', name: '가방지갑' },
-  { id: '50000031', name: '신발' },
+// 카테고리별 시드 키워드 목록
+const CATEGORY_KEYWORDS = [
+  { category: '패션의류', keywords: ['원피스','후드티','청바지','코트','니트','패딩','레깅스','블라우스','슬랙스','맨투맨'] },
+  { category: '패션잡화', keywords: ['운동화','샌들','백팩','크로스백','모자','벨트','지갑','선글라스','부츠','슬리퍼'] },
+  { category: '화장품미용', keywords: ['선크림','파운데이션','립스틱','마스카라','세럼','토너','에센스','비비크림','아이크림','미스트'] },
+  { category: '디지털가전', keywords: ['에어팟','스마트폰','노트북','태블릿','이어폰','스피커','청소기','선풍기','공기청정기','냉장고'] },
+  { category: '가구인테리어', keywords: ['소파','책상','침대','조명','커튼','카펫','행거','선반','수납함','매트리스'] },
+  { category: '출산육아', keywords: ['유모차','기저귀','분유','젖병','아기침대','카시트','이유식','아기로션','베이비워시','속싸개'] },
+  { category: '식품', keywords: ['단백질쉐이크','견과류','그래놀라','오메가3','비타민','홍삼','닭가슴살','샐러드','두부','현미'] },
+  { category: '스포츠레저', keywords: ['요가매트','덤벨','폼롤러','자전거','등산화','테니스라켓','수영복','캠핑의자','헬스장갑','줄넘기'] },
+  { category: '생활건강', keywords: ['마스크','칫솔','면도기','체온계','혈압계','안마기','족욕기','가습기','제습기','공기청정기'] },
+  { category: '여행문화', keywords: ['캐리어','여행가방','목베개','여행파우치','트래블월렛','여행용멀티탭','세면도구세트','압축팩','여권지갑','네임택'] },
+  { category: '반려동물', keywords: ['강아지사료','고양이사료','강아지간식','고양이간식','펫패드','하네스','애견유모차','고양이모래','강아지옷','펫샴푸'] },
+  { category: '도서', keywords: ['자기계발','소설','에세이','경제경영','육아책','요리책','영어공부','수험서','그림책','만화'] },
 ];
 
-// 쇼핑인사이트 카테고리별 인기 키워드 조회
-async function fetchShoppingKeywords(clientId, clientSecret) {
+// 데이터랩 검색어트렌드 API로 카테고리별 인기 키워드 수집
+async function fetchCategoryTrends(clientId, clientSecret) {
   if (!clientId || !clientSecret) return [];
 
   const { startDate, endDate } = getDateRange(7);
   const results = [];
   const seen = new Set();
 
-  for (const cat of SHOPPING_CATEGORIES) {
+  for (const cat of CATEGORY_KEYWORDS) {
     try {
-      const res = await axios.post(
-        'https://openapi.naver.com/v1/datalab/shopping/category/keywords',
-        {
-          startDate,
-          endDate,
-          timeUnit: 'date',
-          category: cat.id,
-          device: '',
-          ages: [],
-          gender: '',
-        },
-        {
-          headers: {
-            'X-Naver-Client-Id': clientId,
-            'X-Naver-Client-Secret': clientSecret,
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000,
-        }
-      );
+      // 5개씩 나눠서 호출 (API 최대 5개 그룹)
+      const chunks = [];
+      for (let i = 0; i < cat.keywords.length; i += 5) {
+        chunks.push(cat.keywords.slice(i, i + 5));
+      }
 
-      const keywords = res.data?.results?.[0]?.data || [];
-      keywords.slice(0, 5).forEach((item, i) => {
-        const kw = item.title || item.keyword || '';
-        if (!kw || seen.has(kw)) return;
-        seen.add(kw);
+      const allScores = [];
+
+      for (const chunk of chunks) {
+        const res = await axios.post(
+          'https://openapi.naver.com/v1/datalab/search',
+          {
+            startDate,
+            endDate,
+            timeUnit: 'date',
+            keywordGroups: chunk.map((kw) => ({ groupName: kw, keywords: [kw] })),
+          },
+          {
+            headers: {
+              'X-Naver-Client-Id': clientId,
+              'X-Naver-Client-Secret': clientSecret,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          }
+        );
+
+        const items = res.data?.results || [];
+        items.forEach((item) => {
+          const data = item.data || [];
+          const avg = data.length ? data.reduce((s, d) => s + (d.ratio || 0), 0) / data.length : 0;
+          allScores.push({ keyword: item.title, ratio: avg });
+        });
+
+        await new Promise((r) => setTimeout(r, 150));
+      }
+
+      // 트렌드 수치 높은 순으로 정렬해서 상위 5개 추가
+      allScores.sort((a, b) => b.ratio - a.ratio);
+      allScores.slice(0, 5).forEach((item, i) => {
+        if (!item.keyword || seen.has(item.keyword)) return;
+        seen.add(item.keyword);
         results.push({
-          keyword: kw,
+          keyword: item.keyword,
           rank: i + 1,
-          category: cat.name,
-          ratio: Math.round(item.ratio || 0),
+          category: cat.category,
+          ratio: Math.round(item.ratio),
           isNew: false,
           collectedAt: Date.now(),
         });
       });
 
-      await new Promise((r) => setTimeout(r, 200));
     } catch (err) {
-      console.error(`쇼핑 ${cat.name} 오류:`, err.response?.status, err.message);
-    }
-  }
-
-  return results;
-}
-
-// 네이버 데이터랩 블로그 카테고리별 인기 키워드 (검색어트렌드)
-const BLOG_CATEGORIES = [
-  { topic: 'home', name: '생활' },
-  { topic: 'food', name: '음식' },
-  { topic: 'sports', name: '스포츠' },
-  { topic: 'beauty', name: '미용' },
-  { topic: 'health', name: '건강' },
-  { topic: 'travel', name: '여행' },
-  { topic: 'entertainment', name: '연예' },
-  { topic: 'game', name: '게임' },
-  { topic: 'pet', name: '반려동물' },
-  { topic: 'culture', name: '문화' },
-];
-
-// 데이터랩 블로그 카테고리 인기 키워드
-async function fetchBlogCategoryKeywords(clientId, clientSecret) {
-  if (!clientId || !clientSecret) return [];
-
-  const { startDate, endDate } = getDateRange(7);
-  const results = [];
-  const seen = new Set();
-
-  for (const cat of BLOG_CATEGORIES) {
-    try {
-      const res = await axios.get(
-        `https://openapi.naver.com/v1/datalab/blog/category/keywords?startDate=${startDate}&endDate=${endDate}&timeUnit=date&category=${cat.topic}&device=&gender=&ages=`,
-        {
-          headers: {
-            'X-Naver-Client-Id': clientId,
-            'X-Naver-Client-Secret': clientSecret,
-          },
-          timeout: 10000,
-        }
-      );
-
-      const keywords = res.data?.results?.[0]?.data || [];
-      keywords.slice(0, 5).forEach((item, i) => {
-        const kw = item.title || item.keyword || '';
-        if (!kw || seen.has(kw)) return;
-        seen.add(kw);
-        results.push({
-          keyword: kw,
-          rank: i + 1,
-          category: cat.name,
-          ratio: Math.round(item.ratio || 0),
-          isNew: false,
-          collectedAt: Date.now(),
-        });
-      });
-
-      await new Promise((r) => setTimeout(r, 150));
-    } catch (err) {
-      console.error(`블로그 카테고리 ${cat.name} 오류:`, err.response?.status, err.message);
+      console.error(`${cat.category} 트렌드 오류:`, err.response?.status, err.message);
     }
   }
 
@@ -166,25 +102,9 @@ async function collectAll({ clientId, clientSecret } = {}) {
     return [];
   }
 
-  const all = [];
-  const seen = new Set();
-
-  const add = (items) => {
-    items.forEach((item) => {
-      if (!item.keyword || seen.has(item.keyword)) return;
-      seen.add(item.keyword);
-      all.push(item);
-    });
-  };
-
-  // 쇼핑인사이트 32개 카테고리 인기 키워드
-  add(await fetchShoppingKeywords(clientId, clientSecret));
-
-  // 블로그 카테고리 인기 키워드
-  add(await fetchBlogCategoryKeywords(clientId, clientSecret));
-
-  console.log(`수집 완료: ${all.length}개`);
-  return all;
+  const results = await fetchCategoryTrends(clientId, clientSecret);
+  console.log(`수집 완료: ${results.length}개`);
+  return results;
 }
 
-module.exports = { collectAll, fetchShoppingKeywords, fetchBlogCategoryKeywords };
+module.exports = { collectAll, fetchCategoryTrends };
