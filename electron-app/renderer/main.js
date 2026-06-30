@@ -521,6 +521,7 @@ function renderCategoryCheckboxes() {
   }).join('');
 
   list.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('click', e => e.stopPropagation());
     cb.addEventListener('change', () => {
       const cat = cb.dataset.cat;
       if (cb.checked) S.selectedCategories.add(cat);
