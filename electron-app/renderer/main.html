@@ -283,19 +283,8 @@
         <input class="filter-input" id="fMaxDoc" type="number" value="0" min="0" placeholder="0=제한없음">
       </div>
       <div class="filter-sep">|</div>
-      <div class="filter-group" style="position:relative;">
-        <button class="filter-input" id="catFilterBtn" style="cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;">📂 카테고리 <span id="catFilterCount" style="color:#9ca3af;">(전체)</span></button>
-        <div id="catFilterPanel" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);padding:10px;z-index:50;width:260px;max-height:320px;overflow-y:auto;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;">
-            <a href="#" id="catSelectAll" style="color:#3b82f6;">전체선택</a>
-            <a href="#" id="catSelectNone" style="color:#6b7280;">전체해제</a>
-          </div>
-          <div id="catCheckboxList" style="display:flex;flex-direction:column;gap:4px;font-size:13px;"></div>
-        </div>
-      </div>
-      <div class="filter-sep">|</div>
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7280;cursor:pointer;">
-        <input type="checkbox" id="fNewOnly" checked> NEW만
+        <input type="checkbox" id="fNewOnly"> NEW만
       </label>
       <span class="last-collected" id="lastCollected">미수집</span>
     </div>
@@ -320,7 +309,16 @@
           <tr>
             <th><input type="checkbox" id="checkAll"></th>
             <th data-col="keyword">키워드</th>
-            <th data-col="category">카테고리</th>
+            <th data-col="category" style="position:relative;">
+              <span id="catHeaderLabel">카테고리</span>
+              <div id="catFilterPanel" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);padding:10px;z-index:50;width:240px;max-height:320px;overflow-y:auto;font-weight:normal;text-align:left;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;">
+                  <a href="#" id="catSelectAll" style="color:#3b82f6;">전체선택</a>
+                  <a href="#" id="catSelectNone" style="color:#6b7280;">전체해제</a>
+                </div>
+                <div id="catCheckboxList" style="display:flex;flex-direction:column;gap:4px;font-size:13px;"></div>
+              </div>
+            </th>
             <th data-col="rank">트렌드순위</th>
             <th data-col="pc">PC검색</th>
             <th data-col="mobile">모바일검색</th>

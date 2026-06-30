@@ -319,8 +319,15 @@ function initKeywordTab() {
   initCategoryFilter();
 
   document.querySelectorAll('th[data-col]').forEach(th => {
-    th.addEventListener('click', () => {
+    th.addEventListener('click', (e) => {
       const col = th.dataset.col;
+      if (col === 'category') {
+        e.stopPropagation();
+        renderCategoryCheckboxes();
+        const panel = document.getElementById('catFilterPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        return;
+      }
       if (S.sortCol === col) S.sortDir = S.sortDir==='asc'?'desc':'asc';
       else { S.sortCol = col; S.sortDir = col==='keyword'?'asc':'desc'; }
       renderTable();
@@ -450,26 +457,23 @@ function goWriteSelected() {
   showToast(`${sel.length}개 키워드 전달 완료.`);
 }
 
-// 카테고리 필터: selectedCategories가 비어있으면 "전체"를 의미함
+// 카테고리 필터: selectedCategories가 비어있으면 전체 선택을 의미
 function initCategoryFilter() {
-  S.selectedCategories = new Set(); // 비어있음 = 전체 선택 상태
+  S.selectedCategories = new Set();
 
-  const btn   = document.getElementById('catFilterBtn');
   const panel = document.getElementById('catFilterPanel');
 
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    renderCategoryCheckboxes();
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  });
-
   document.addEventListener('click', (e) => {
-    if (!panel.contains(e.target) && e.target !== btn) panel.style.display = 'none';
+    if (panel.style.display === 'block' && !panel.contains(e.target) && e.target.closest('th[data-col="category"]') === null) {
+      panel.style.display = 'none';
+    }
   });
 
   document.getElementById('catSelectAll').addEventListener('click', (e) => {
     e.preventDefault();
-    S.selectedCategories.clear(); // 전체 선택 = 빈 집합
+    e.stopPropagation();
+    const allCats = getAllCategories();
+    S.selectedCategories = new Set(allCats);
     renderCategoryCheckboxes();
     updateCatFilterLabel();
     renderTable();
@@ -477,9 +481,8 @@ function initCategoryFilter() {
 
   document.getElementById('catSelectNone').addEventListener('click', (e) => {
     e.preventDefault();
-    // 전체 해제: 실제 카테고리 목록을 selectedCategories에 넣되 전부 빈 상태로 만들기 위해
-    // 더미 카테고리 하나만 넣어서 어떤 키워드도 매칭되지 않게 함
-    S.selectedCategories = new Set(['__NONE__']);
+    e.stopPropagation();
+    S.selectedCategories = new Set();
     renderCategoryCheckboxes();
     updateCatFilterLabel();
     renderTable();
@@ -499,10 +502,9 @@ function renderCategoryCheckboxes() {
     return;
   }
 
-  const isAllMode = S.selectedCategories.size === 0;
-
   list.innerHTML = allCats.map(cat => {
-    const isChecked = isAllMode ? true : S.selectedCategories.has(cat);
+    const isAllMode = S.selectedCategories.size === 0;
+    const isChecked = isAllMode || S.selectedCategories.has(cat);
     return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
       <input type="checkbox" data-cat="${cat}" ${isChecked ? 'checked' : ''}> ${cat}
     </label>`;
@@ -511,27 +513,23 @@ function renderCategoryCheckboxes() {
   list.querySelectorAll('input[type=checkbox]').forEach(cb => {
     cb.addEventListener('change', () => {
       const cat = cb.dataset.cat;
-      const allCats = getAllCategories();
+      const allCats2 = getAllCategories();
 
-      // 현재 전체선택 모드(빈 집합)였다면, 클릭한 카테고리만 빼고 나머지 전부 채워넣기
-      if (S.selectedCategories.size === 0 || S.selectedCategories.has('__NONE__')) {
-        S.selectedCategories = new Set(allCats);
-      }
-
-      if (cb.checked) {
-        S.selectedCategories.add(cat);
-      } else {
-        S.selectedCategories.delete(cat);
-      }
-
-      // 전부 다시 체크된 상태면 "전체" 모드로 되돌리기
-      if (S.selectedCategories.size === allCats.length) {
-        S.selectedCategories.clear();
-      }
-      // 전부 해제된 상태면 더미 카테고리로 표시
+      // 전체모드(빈 집합)였다면 클릭한 카테고리 기준으로 새로 채움
       if (S.selectedCategories.size === 0) {
-        S.selectedCategories.add('__NONE__');
+        if (cb.checked) {
+          // 전체모드에서 하나만 체크해제하려는 의도 -> 나머지 전부 채우고 이번 것만 제외하면 안 되므로
+          // 전체모드에서 체크박스를 끄면 "이것만 빼고 나머지 보기"가 아니라 "이것만 보기"가 자연스러움
+          S.selectedCategories = new Set([cat]);
+        } else {
+          S.selectedCategories = new Set(allCats2.filter(c => c !== cat));
+        }
+      } else {
+        if (cb.checked) S.selectedCategories.add(cat);
+        else S.selectedCategories.delete(cat);
       }
+
+      if (S.selectedCategories.size === allCats2.length) S.selectedCategories = new Set();
 
       updateCatFilterLabel();
       renderTable();
@@ -540,15 +538,13 @@ function renderCategoryCheckboxes() {
 }
 
 function updateCatFilterLabel() {
-  const el = document.getElementById('catFilterCount');
+  const el = document.getElementById('catHeaderLabel');
   const allCats = getAllCategories();
 
-  if (S.selectedCategories.size === 0) {
-    el.textContent = '(전체)';
-  } else if (S.selectedCategories.has('__NONE__')) {
-    el.textContent = '(0개)';
+  if (S.selectedCategories.size === 0 || S.selectedCategories.size === allCats.length) {
+    el.textContent = '카테고리';
   } else {
-    el.textContent = `(${S.selectedCategories.size}개)`;
+    el.textContent = `카테고리 (${S.selectedCategories.size})`;
   }
 }
 
@@ -563,10 +559,7 @@ function getFilteredSorted() {
     if (kw.total     !== null && kw.total     < minSearch) return false;
     if (kw.goldIndex !== null && kw.goldIndex < minGold)   return false;
     if (maxDoc > 0 && kw.docCount !== null && kw.docCount > maxDoc) return false;
-    if (S.selectedCategories && S.selectedCategories.size > 0) {
-      if (S.selectedCategories.has('__NONE__')) return false;
-      if (!S.selectedCategories.has(kw.category)) return false;
-    }
+    if (S.selectedCategories && S.selectedCategories.size > 0 && !S.selectedCategories.has(kw.category)) return false;
     return true;
   });
 
