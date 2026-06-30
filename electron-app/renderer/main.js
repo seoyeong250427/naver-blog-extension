@@ -316,6 +316,8 @@ function initKeywordTab() {
     document.getElementById(id).addEventListener('change', renderTable);
   });
 
+  initCategoryFilter();
+
   document.querySelectorAll('th[data-col]').forEach(th => {
     th.addEventListener('click', () => {
       const col = th.dataset.col;
@@ -448,6 +450,108 @@ function goWriteSelected() {
   showToast(`${sel.length}개 키워드 전달 완료.`);
 }
 
+// 카테고리 필터: selectedCategories가 비어있으면 "전체"를 의미함
+function initCategoryFilter() {
+  S.selectedCategories = new Set(); // 비어있음 = 전체 선택 상태
+
+  const btn   = document.getElementById('catFilterBtn');
+  const panel = document.getElementById('catFilterPanel');
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    renderCategoryCheckboxes();
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!panel.contains(e.target) && e.target !== btn) panel.style.display = 'none';
+  });
+
+  document.getElementById('catSelectAll').addEventListener('click', (e) => {
+    e.preventDefault();
+    S.selectedCategories.clear(); // 전체 선택 = 빈 집합
+    renderCategoryCheckboxes();
+    updateCatFilterLabel();
+    renderTable();
+  });
+
+  document.getElementById('catSelectNone').addEventListener('click', (e) => {
+    e.preventDefault();
+    // 전체 해제: 실제 카테고리 목록을 selectedCategories에 넣되 전부 빈 상태로 만들기 위해
+    // 더미 카테고리 하나만 넣어서 어떤 키워드도 매칭되지 않게 함
+    S.selectedCategories = new Set(['__NONE__']);
+    renderCategoryCheckboxes();
+    updateCatFilterLabel();
+    renderTable();
+  });
+}
+
+function getAllCategories() {
+  return [...new Set(S.keywords.map(k => k.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+}
+
+function renderCategoryCheckboxes() {
+  const list = document.getElementById('catCheckboxList');
+  const allCats = getAllCategories();
+
+  if (allCats.length === 0) {
+    list.innerHTML = '<div style="color:#9ca3af;font-size:12px;">수집된 키워드가 없습니다.</div>';
+    return;
+  }
+
+  const isAllMode = S.selectedCategories.size === 0;
+
+  list.innerHTML = allCats.map(cat => {
+    const isChecked = isAllMode ? true : S.selectedCategories.has(cat);
+    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" data-cat="${cat}" ${isChecked ? 'checked' : ''}> ${cat}
+    </label>`;
+  }).join('');
+
+  list.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const cat = cb.dataset.cat;
+      const allCats = getAllCategories();
+
+      // 현재 전체선택 모드(빈 집합)였다면, 클릭한 카테고리만 빼고 나머지 전부 채워넣기
+      if (S.selectedCategories.size === 0 || S.selectedCategories.has('__NONE__')) {
+        S.selectedCategories = new Set(allCats);
+      }
+
+      if (cb.checked) {
+        S.selectedCategories.add(cat);
+      } else {
+        S.selectedCategories.delete(cat);
+      }
+
+      // 전부 다시 체크된 상태면 "전체" 모드로 되돌리기
+      if (S.selectedCategories.size === allCats.length) {
+        S.selectedCategories.clear();
+      }
+      // 전부 해제된 상태면 더미 카테고리로 표시
+      if (S.selectedCategories.size === 0) {
+        S.selectedCategories.add('__NONE__');
+      }
+
+      updateCatFilterLabel();
+      renderTable();
+    });
+  });
+}
+
+function updateCatFilterLabel() {
+  const el = document.getElementById('catFilterCount');
+  const allCats = getAllCategories();
+
+  if (S.selectedCategories.size === 0) {
+    el.textContent = '(전체)';
+  } else if (S.selectedCategories.has('__NONE__')) {
+    el.textContent = '(0개)';
+  } else {
+    el.textContent = `(${S.selectedCategories.size}개)`;
+  }
+}
+
 function getFilteredSorted() {
   const minSearch = parseFloat(document.getElementById('fMinSearch').value) || 0;
   const minGold   = parseFloat(document.getElementById('fMinGold').value)   || 0;
@@ -459,6 +563,10 @@ function getFilteredSorted() {
     if (kw.total     !== null && kw.total     < minSearch) return false;
     if (kw.goldIndex !== null && kw.goldIndex < minGold)   return false;
     if (maxDoc > 0 && kw.docCount !== null && kw.docCount > maxDoc) return false;
+    if (S.selectedCategories && S.selectedCategories.size > 0) {
+      if (S.selectedCategories.has('__NONE__')) return false;
+      if (!S.selectedCategories.has(kw.category)) return false;
+    }
     return true;
   });
 
