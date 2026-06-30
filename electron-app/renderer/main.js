@@ -323,7 +323,7 @@ function initKeywordTab() {
       const col = th.dataset.col;
       if (col === 'category') {
         e.stopPropagation();
-        renderCategoryCheckboxes();
+        openCategoryPanel();
         const panel = document.getElementById('catFilterPanel');
         panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
         return;
@@ -457,7 +457,8 @@ function goWriteSelected() {
   showToast(`${sel.length}개 키워드 전달 완료.`);
 }
 
-// 카테고리 필터: selectedCategories가 비어있으면 전체 선택을 의미
+// 카테고리 필터: selectedCategories는 "현재 보여줄 카테고리 목록"을 그대로 담음
+// 초기값 = 전체 카테고리 모두 포함 (전체 선택 상태)
 function initCategoryFilter() {
   S.selectedCategories = new Set();
 
@@ -472,8 +473,7 @@ function initCategoryFilter() {
   document.getElementById('catSelectAll').addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const allCats = getAllCategories();
-    S.selectedCategories = new Set(allCats);
+    S.selectedCategories = new Set(getAllCategories());
     renderCategoryCheckboxes();
     updateCatFilterLabel();
     renderTable();
@@ -482,7 +482,7 @@ function initCategoryFilter() {
   document.getElementById('catSelectNone').addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    S.selectedCategories = new Set();
+    S.selectedCategories = new Set(); // 빈 집합 = 아무것도 선택 안 함
     renderCategoryCheckboxes();
     updateCatFilterLabel();
     renderTable();
@@ -491,6 +491,17 @@ function initCategoryFilter() {
 
 function getAllCategories() {
   return [...new Set(S.keywords.map(k => k.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+}
+
+// 드롭다운을 열 때 호출 - 처음 한 번만 전체 카테고리로 초기화
+function openCategoryPanel() {
+  const allCats = getAllCategories();
+  // 아직 한 번도 설정 안 한 초기 상태라면 전체 선택으로 채움
+  if (!S.categoryFilterInitialized) {
+    S.selectedCategories = new Set(allCats);
+    S.categoryFilterInitialized = true;
+  }
+  renderCategoryCheckboxes();
 }
 
 function renderCategoryCheckboxes() {
@@ -503,8 +514,7 @@ function renderCategoryCheckboxes() {
   }
 
   list.innerHTML = allCats.map(cat => {
-    const isAllMode = S.selectedCategories.size === 0;
-    const isChecked = isAllMode || S.selectedCategories.has(cat);
+    const isChecked = S.selectedCategories.has(cat);
     return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
       <input type="checkbox" data-cat="${cat}" ${isChecked ? 'checked' : ''}> ${cat}
     </label>`;
@@ -513,24 +523,8 @@ function renderCategoryCheckboxes() {
   list.querySelectorAll('input[type=checkbox]').forEach(cb => {
     cb.addEventListener('change', () => {
       const cat = cb.dataset.cat;
-      const allCats2 = getAllCategories();
-
-      // 전체모드(빈 집합)였다면 클릭한 카테고리 기준으로 새로 채움
-      if (S.selectedCategories.size === 0) {
-        if (cb.checked) {
-          // 전체모드에서 하나만 체크해제하려는 의도 -> 나머지 전부 채우고 이번 것만 제외하면 안 되므로
-          // 전체모드에서 체크박스를 끄면 "이것만 빼고 나머지 보기"가 아니라 "이것만 보기"가 자연스러움
-          S.selectedCategories = new Set([cat]);
-        } else {
-          S.selectedCategories = new Set(allCats2.filter(c => c !== cat));
-        }
-      } else {
-        if (cb.checked) S.selectedCategories.add(cat);
-        else S.selectedCategories.delete(cat);
-      }
-
-      if (S.selectedCategories.size === allCats2.length) S.selectedCategories = new Set();
-
+      if (cb.checked) S.selectedCategories.add(cat);
+      else S.selectedCategories.delete(cat);
       updateCatFilterLabel();
       renderTable();
     });
@@ -541,7 +535,9 @@ function updateCatFilterLabel() {
   const el = document.getElementById('catHeaderLabel');
   const allCats = getAllCategories();
 
-  if (S.selectedCategories.size === 0 || S.selectedCategories.size === allCats.length) {
+  if (S.selectedCategories.size === 0) {
+    el.textContent = '카테고리 (0)';
+  } else if (S.selectedCategories.size === allCats.length) {
     el.textContent = '카테고리';
   } else {
     el.textContent = `카테고리 (${S.selectedCategories.size})`;
@@ -559,7 +555,7 @@ function getFilteredSorted() {
     if (kw.total     !== null && kw.total     < minSearch) return false;
     if (kw.goldIndex !== null && kw.goldIndex < minGold)   return false;
     if (maxDoc > 0 && kw.docCount !== null && kw.docCount > maxDoc) return false;
-    if (S.selectedCategories && S.selectedCategories.size > 0 && !S.selectedCategories.has(kw.category)) return false;
+    if (S.categoryFilterInitialized && !S.selectedCategories.has(kw.category)) return false;
     return true;
   });
 
