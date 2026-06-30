@@ -38,13 +38,13 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 // ── IPC: 트렌드 키워드 수집 ──────────────────────────────────────
-ipcMain.handle('collect-trends', async () => {
+ipcMain.handle('collect-trends', async (_event, params = {}) => {
   try {
     const data = loadAppData();
     const settings = data.settings || {};
-    const cookie = settings.naverCookie || '';
-    const advisorUrl = settings.advisorUrl || 'https://creator-advisor.naver.com/naver_blog/foodlover1109/trends';
-    const results = await NaverTrends.collectAll({ cookie, advisorUrl });
+    const clientId = params.clientId || settings.naverClientId || '';
+    const clientSecret = params.clientSecret || settings.naverClientSecret || '';
+    const results = await NaverTrends.collectAll({ clientId, clientSecret });
     return { success: true, data: results };
   } catch (err) {
     return { success: false, error: err.message };
