@@ -8,7 +8,8 @@ const NaverTrends = require('./api/naver-trends');
 let mainWindow;
 
 function getDataPath() {
-  return path.join(app.getPath('userData'), 'appdata.json');
+  // userData 경로 대신 앱 폴더 옆에 고정 경로 사용 (실행 방식에 따라 userData가 바뀌는 문제 방지)
+  return path.join(__dirname, 'appdata.json');
 }
 
 function loadAppData() {
