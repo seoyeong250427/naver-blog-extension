@@ -352,6 +352,7 @@ async function collectTrends() {
     const res = await window.electronAPI.collectTrends({
       clientId: S.settings.naverClientId || '',
       clientSecret: S.settings.naverClientSecret || '',
+      blogId: S.settings.sBlogId || '',
       maxRank: parseInt(S.settings.sMaxRank || 20),
       newOnly: document.getElementById('fNewOnly').checked
     });
@@ -839,8 +840,8 @@ function initSettingsTab() {
 
 function loadSettingsUI() {
   const s = S.settings;
-  ['sNaverCid','sNaverLic','sNaverSecret','sNaverClientId','sNaverClientSecret','sClaudeKey','sOpenaiKey','sAutoTime','sAutoInterval','sMaxRank','sMinRise'].forEach(id => {
-    const key = { sNaverCid:'naverCustomerId', sNaverLic:'naverAccessLicense', sNaverSecret:'naverSecretKey', sNaverClientId:'naverClientId', sNaverClientSecret:'naverClientSecret', sClaudeKey:'claudeApiKey', sOpenaiKey:'openaiApiKey', sAutoTime:'sAutoTime', sAutoInterval:'sAutoInterval', sMaxRank:'sMaxRank', sMinRise:'sMinRise' }[id];
+  ['sNaverCid','sNaverLic','sNaverSecret','sNaverClientId','sNaverClientSecret','sBlogId','sClaudeKey','sOpenaiKey','sAutoTime','sAutoInterval','sMaxRank','sMinRise'].forEach(id => {
+    const key = { sNaverCid:'naverCustomerId', sNaverLic:'naverAccessLicense', sNaverSecret:'naverSecretKey', sNaverClientId:'naverClientId', sNaverClientSecret:'naverClientSecret', sBlogId:'sBlogId', sClaudeKey:'claudeApiKey', sOpenaiKey:'openaiApiKey', sAutoTime:'sAutoTime', sAutoInterval:'sAutoInterval', sMaxRank:'sMaxRank', sMinRise:'sMinRise' }[id];
     if (s[key] != null) document.getElementById(id).value = s[key];
   });
   renderAccountList();
@@ -854,6 +855,7 @@ function saveSettingsUI() {
     naverSecretKey:     document.getElementById('sNaverSecret').value.trim(),
     naverClientId:      document.getElementById('sNaverClientId').value.trim(),
     naverClientSecret:  document.getElementById('sNaverClientSecret').value.trim(),
+    sBlogId:            document.getElementById('sBlogId').value.trim(),
     claudeApiKey:       document.getElementById('sClaudeKey').value.trim(),
     openaiApiKey:       document.getElementById('sOpenaiKey').value.trim(),
     sAutoTime:          document.getElementById('sAutoTime').value,
