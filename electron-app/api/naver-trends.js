@@ -100,7 +100,7 @@ async function fetchTrendScore(keywords, clientId, clientSecret) {
   return scores;
 }
 
-// 카테고리별: 시드 키워드 → 자동완성 확장 → (선택)데이터랩 정렬
+// 카테고리별: 시드 키워드 → 자동완성 확장(2단계) → (선택)데이터랩 정렬
 async function collectAll({ clientId, clientSecret } = {}) {
   const results = [];
   let rank = 1;
@@ -113,9 +113,16 @@ async function collectAll({ clientId, clientSecret } = {}) {
       const suggestions = await fetchAutocomplete(seed);
       suggestions.slice(0, 5).forEach(kw => collected.add(kw));
       await new Promise(r => setTimeout(r, 80));
+
+      // 2단계 확장: 1차 결과를 다시 시드로 써서 롱테일 후보 확보
+      for (const kw of suggestions.slice(0, 3)) {
+        const deeper = await fetchAutocomplete(kw);
+        deeper.slice(0, 3).forEach(kw2 => collected.add(kw2));
+        await new Promise(r => setTimeout(r, 80));
+      }
     }
 
-    let keywordList = [...collected].slice(0, 10);
+    let keywordList = [...collected].slice(0, 20);
 
     // 데이터랩 API 키 있으면 트렌드 점수로 정렬
     if (clientId && clientSecret && keywordList.length > 0) {
@@ -138,4 +145,28 @@ async function collectAll({ clientId, clientSecret } = {}) {
   return results;
 }
 
-module.exports = { collectAll, CATEGORY_SEEDS, fetchAutocomplete };
+// 크리에이터 어드바이저 API 원본 응답(카테고리별 JSON)을 키워드 목록으로 변환
+// raw 형태: { [category]: 응답JSON, ... } (main.js의 collectFromAdvisor가 전달)
+function normalizeAdvisorRaw(raw) {
+  const results = [];
+  let rank = 1;
+
+  for (const [category, json] of Object.entries(raw || {})) {
+    const items = json?.keywordList || json?.keywords || json?.data || [];
+    items.forEach(item => {
+      const keyword = item.keyword || item.name || item.title || '';
+      if (!keyword) return;
+      results.push({
+        keyword,
+        rank: rank++,
+        category,
+        rank_change: item.rankChange || item.rank_change || 0,
+        isNew: item.isNew || item.is_new || false,
+        collectedAt: Date.now(),
+      });
+    });
+  }
+  return results;
+}
+
+module.exports = { collectAll, CATEGORY_SEEDS, fetchAutocomplete, normalizeAdvisorRaw };
